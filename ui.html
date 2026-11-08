@@ -1,0 +1,1466 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DiskLens</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" onerror="this.remove()"
+  href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&display=swap">
+<style>
+  :root {
+    color-scheme: dark;
+
+    --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px;
+    --r: 18px;            /* card radius - bento wants 16-24 */
+    --r-s: 11px;
+
+    --ink: #07070a;       /* the canvas behind the blocks */
+    --panel: #121218;
+    --panel-2: #1b1b23;
+    --hair: #2a2a35;
+    --text: #f4f4f7;
+    --text-2: #9a9aa8;
+    --text-3: #6b6b7a;
+
+    --lime: #c6f135;      /* the loud trio */
+    --violet: #6b4bff;
+    --cyan: #16d9cf;
+    --bad: #ff4d4d;
+
+    /* verdict blocks: fill + the text colour that actually passes on it */
+    --v-CACHE: #c6f135;   --vt-CACHE: #07070a;
+    --v-MODELS: #ffb224;  --vt-MODELS: #07070a;
+    --v-HEAVY: #6b4bff;   --vt-HEAVY: #ffffff;
+    --v-DATA: #e4e4ec;    --vt-DATA: #07070a;
+    --v-SYSTEM: #ff4fd8;  --vt-SYSTEM: #07070a;
+    --v-UNKNOWN: #2f2f3d; --vt-UNKNOWN: #ffffff;
+    --v-FILES: #16d9cf;   --vt-FILES: #07070a;
+
+    --ease: cubic-bezier(.32,.72,0,1);
+  }
+  /* Ivory, not white: a page-white canvas under saturated blocks glares. */
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --ink: #f4f1e8;
+    --panel: #fffdf8;
+    --panel-2: #efeadd;
+    --hair: #e0d9c8;
+    --text: #15130d;
+    --text-2: #585243;
+    --text-3: #8a8373;
+    --bad: #d93025;
+    --shadow-s: 0 1px 2px rgba(60,50,25,.07), 0 6px 18px rgba(60,50,25,.06);
+
+    /* Acid lime sits at 1.16:1 against ivory - a block nobody can see the edge
+       of. Deepen it here; the dark theme keeps the bright one. */
+    --lime: #a8cf00;
+
+    /* The neutral fills flip: near-white blocks vanish on ivory, but going
+       dark makes the whole map read as night. Mid-tone, warm, dark label. */
+    --v-CACHE: #a8cf00;   --vt-CACHE: #07070a;
+    --v-DATA: #a8a090;    --vt-DATA: #15130d;
+    --v-UNKNOWN: #9397a8; --vt-UNKNOWN: #0d0f16;
+  }
+  :root[data-theme="light"] .card,
+  :root[data-theme="light"] .row,
+  :root[data-theme="light"] .dupe,
+  :root[data-theme="light"] .stat.count { box-shadow: var(--shadow-s); }
+  :root[data-theme="light"] .tile { box-shadow: inset 0 0 0 1px rgba(0,0,0,.07), 0 1px 2px rgba(60,50,25,.12); }
+  :root[data-theme="light"] .row:hover { background: var(--panel-2); }
+  :root[data-theme="light"] .copy:hover { background: var(--panel-2); }
+  :root[data-theme="light"] .row .track,
+  :root[data-theme="light"] .fileline .bar { background: #e6e0d0; }
+  :root[data-theme="light"] .scrim { background: rgba(60,50,25,.3); }
+  /* buttons that sit on an accent card borrowed --ink, which is the canvas */
+  :root[data-theme="light"] .reclaim .btn,
+  :root[data-theme="light"] .tray .btn.bad { background: var(--text); color: var(--panel); }
+  :root[data-theme="light"] .chip { background: var(--text); color: var(--panel); }
+  :root[data-theme="light"] * { scrollbar-color: #cdc5b2 transparent; }
+  :root[data-theme="light"] ::-webkit-scrollbar-thumb { background: #cdc5b2; background-clip: content-box; }
+  :root[data-theme="light"] ::-webkit-scrollbar-thumb:hover { background: #b3aa94; background-clip: content-box; }
+
+  @media (prefers-contrast: more) { :root { --hair: #6b6b7a; --text-2: #d0d0da; } }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font: 500 100%/1.45 "Space Grotesk", "Segoe UI Variable Text", system-ui, sans-serif;
+    background: var(--ink); color: var(--text);
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+  button { font: inherit; color: inherit; border: 0; background: none; cursor: pointer; }
+  :focus-visible { outline: 3px solid var(--lime); outline-offset: 2px; border-radius: 8px; }
+  svg { display: block; }
+
+  /* the default Windows scrollbar is a bright slab against this canvas */
+  * { scrollbar-width: thin; scrollbar-color: #3a3a48 transparent; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #33333f; border-radius: 99px;
+    border: 3px solid transparent; background-clip: content-box; }
+  ::-webkit-scrollbar-thumb:hover { background: #4a4a5a; background-clip: content-box; }
+  ::-webkit-scrollbar-corner { background: transparent; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden;
+    clip: rect(0 0 0 0); white-space: nowrap; }
+
+  /* the uppercase micro-label that holds the whole look together */
+  .lbl { font-size: .625rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+  .num { font-weight: 700; letter-spacing: -.04em; line-height: .92; font-variant-numeric: tabular-nums; }
+
+  .card { background: var(--panel); border-radius: var(--r); position: relative; overflow: hidden; }
+  .card.pad { padding: var(--s4); }
+
+  /* ------------------------------------------------------------ top --- */
+  header {
+    flex: none; display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap;
+    padding: var(--s3) var(--s3) 0;
+  }
+  .word {
+    display: flex; align-items: baseline; gap: var(--s2);
+    padding: var(--s2) var(--s4); border-radius: var(--r-s);
+    background: var(--lime); color: var(--ink);
+  }
+  .word b { font-size: 1.25rem; font-weight: 700; letter-spacing: -.045em; }
+  .word span { font-size: .625rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; opacity: .72; }
+
+  .drive { display: flex; align-items: center; gap: var(--s2); padding: var(--s2) var(--s3);
+    border-radius: var(--r-s); background: var(--panel); color: var(--text-2); }
+  .drive b { color: var(--text); font-size: .8125rem; }
+
+  .menu { position: relative; }
+  .menu > button { display: flex; align-items: center; gap: var(--s2);
+    font-size: .8125rem; font-weight: 700; letter-spacing: -.01em; color: var(--text);
+    background: var(--panel-2); border-radius: 9px; padding: 7px 10px; min-height: 34px;
+    transition: transform .14s ease-out, filter .2s ease-out; }
+  .menu > button:hover { filter: brightness(1.2); }
+  .menu > button:active { transform: scale(.96); }
+  .menu > button svg { transition: transform .22s var(--ease); }
+  .menu > button[aria-expanded="true"] svg { transform: rotate(270deg) !important; }
+
+  .menu ul { position: absolute; top: calc(100% + 7px); left: 0; z-index: 70;
+    min-width: 236px; margin: 0; padding: var(--s1); list-style: none;
+    background: var(--panel); border: 1px solid var(--hair); border-radius: 13px;
+    box-shadow: 0 18px 44px rgba(0,0,0,.5);
+    transform-origin: top left; animation: pop .18s var(--ease); }
+  @keyframes pop { from { opacity: 0; transform: scale(.96) translateY(-4px); } }
+  .menu ul[hidden] { display: none; }
+  .menu li button { display: flex; align-items: center; gap: var(--s2); width: 100%;
+    padding: 9px 10px; border-radius: 9px; text-align: left; font-size: .8125rem; font-weight: 600; }
+  .menu li button:hover { background: var(--panel-2); }
+  /* lime is light in both themes, so the label on it is always the dark ink */
+  .menu li button[aria-selected="true"] { background: var(--lime); color: #07070a; }
+  .menu li button[aria-selected="true"] span { opacity: .85; }
+  .menu li b { font-weight: 700; letter-spacing: -.01em; }
+  .menu li span { margin-left: auto; font-size: .6875rem; font-weight: 600; opacity: .72;
+    font-variant-numeric: tabular-nums; }
+
+  .dupebar { display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap;
+    padding: 0 var(--s1) var(--s3); }
+  .dupebar select { font: inherit; font-size: .6875rem; font-weight: 700; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--text); background: var(--panel-2); border: 0;
+    border-radius: 9px; padding: 9px 10px; cursor: pointer; }
+
+  .dupe { border-radius: 14px; background: var(--panel-2); margin-bottom: var(--s2); overflow: hidden; }
+  .dupe > header { display: grid; grid-template-columns: 1fr auto; gap: var(--s3);
+    align-items: center; padding: var(--s3); border-bottom: 1px solid var(--hair); }
+  .dupe .nm { font-size: .9375rem; font-weight: 700; letter-spacing: -.02em;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dupe .meta { font-size: .5625rem; font-weight: 700; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--text-3); margin-top: 3px; }
+  .dupe .waste { font-size: 1.0625rem; font-weight: 700; letter-spacing: -.03em;
+    color: var(--v-FILES); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .copy { display: grid; grid-template-columns: 38px 1fr auto; gap: var(--s2); align-items: center;
+    padding: 6px var(--s3); }
+  .copy:hover { background: #262632; }
+  .copy .p { font-size: .6875rem; color: var(--text-2); overflow: hidden; text-overflow: ellipsis;
+    white-space: nowrap; direction: rtl; text-align: left; }
+  .copy .keep { font-size: .5625rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--v-CACHE); white-space: nowrap; }
+
+  .seg { display: flex; gap: var(--s1); padding: var(--s1); border-radius: 13px; background: var(--panel); }
+  .seg button { display: flex; align-items: center; gap: 7px; padding: 9px 14px; min-height: 38px;
+    border-radius: 10px; font-size: .75rem; font-weight: 700; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--text-2);
+    transition: transform .14s ease-out, background .18s ease-out, color .18s ease-out; }
+  .seg button:hover { color: var(--text); background: var(--panel-2); }
+  .seg button[aria-selected="true"] { background: var(--text); color: var(--ink); }
+  .seg button:active { transform: scale(.95); }
+
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+    padding: 10px 16px; min-height: 40px; border-radius: 11px;
+    font-size: .75rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+    background: var(--panel-2); color: var(--text);
+    transition: transform .14s ease-out, filter .2s ease-out, background .2s ease-out; }
+  .btn:hover { filter: brightness(1.18); }
+  .btn:active { transform: scale(.95); }
+  .btn:disabled { opacity: .35; cursor: not-allowed; transform: none; filter: none; }
+  .btn.lime { background: var(--lime); color: var(--ink); }
+  .btn.bad { background: var(--bad); color: #fff; }
+  .btn.ghost { background: transparent; box-shadow: inset 0 0 0 1.5px var(--hair); }
+  .btn.ico { width: 40px; padding: 0; }
+
+  /* the circled arrow chip the reference leans on */
+  .chip { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center;
+    background: var(--ink); color: var(--text); flex: none;
+    transition: transform .22s var(--ease); }
+  .chip:hover { transform: rotate(45deg); }
+
+  /* ----------------------------------------------------------- bento --- */
+  main { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0,1fr) 362px;
+    gap: var(--s3); padding: var(--s3); }
+  .col { display: flex; flex-direction: column; gap: var(--s3); min-width: 0; min-height: 0; }
+
+  .stats { display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: var(--s3); flex: none; }
+  .stat { padding: var(--s3) var(--s4); border-radius: var(--r); display: flex;
+    flex-direction: column; justify-content: space-between; min-height: 108px; }
+  .stat .lbl { opacity: .66; }
+  .stat .v { font-size: clamp(1.6rem, 3.4vw, 2.5rem); }
+  .stat .sub { font-size: .6875rem; font-weight: 600; opacity: .66; }
+  .stat.free { background: var(--lime); color: var(--ink); }
+  .stat.used { background: var(--violet); color: #fff; }
+  .stat.count { background: var(--panel); color: var(--text); }
+  .stat.count .v { font-size: clamp(1.1rem, 2vw, 1.5rem); }
+
+  .ratio { height: 8px; border-radius: 99px; overflow: hidden; display: flex; background: rgba(0,0,0,.25); }
+  .ratio i { display: block; height: 100%; transition: width .6s var(--ease); }
+
+  .scanbar { height: 5px; border-radius: 99px; overflow: hidden; background: var(--panel-2); }
+  .scanbar i { display: block; height: 100%; width: 32%; border-radius: 99px;
+    background: linear-gradient(90deg, transparent, var(--lime), transparent);
+    animation: sweep 1.2s linear infinite; }
+  @keyframes sweep { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
+
+  /* ------------------------------------------------------------ hero --- */
+  .hero { flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--panel); }
+  .herobar { flex: none; display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap;
+    padding: var(--s3) var(--s4); border-bottom: 1px solid var(--hair); }
+  .crumbs { display: flex; align-items: center; gap: var(--s1); flex-wrap: wrap; min-width: 0; }
+  .crumbs button { padding: 5px 10px; min-height: 30px; border-radius: 8px; background: var(--panel-2);
+    font-size: .6875rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--text-2); }
+  .crumbs button:hover { color: var(--text); }
+  .crumbs button:last-of-type { background: var(--text); color: var(--ink); }
+  .crumbs i { color: var(--text-3); font-style: normal; }
+  .herobar .right { margin-left: auto; display: flex; align-items: center; gap: var(--s4); }
+
+  .keys { display: inline-flex; align-items: center; gap: 5px; font-size: .5625rem;
+    font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--text-3); }
+  .keys kbd { font: inherit; padding: 3px 6px; border-radius: 6px;
+    background: var(--panel-2); color: var(--text-2); }
+  @media (max-width: 1320px) { .keys { display: none; } }
+
+  #map { position: relative; flex: 1; margin: var(--s3); min-height: 0; }
+  .scroll { flex: 1; overflow: auto; padding: var(--s3); min-height: 0; }
+
+  .tile { position: absolute; overflow: hidden; border-radius: 13px; padding: 9px 11px;
+    text-align: left; background: var(--tint); color: var(--tone);
+    transition: transform .2s var(--ease), box-shadow .2s ease-out, filter .2s ease-out; }
+  .tile:hover { transform: scale(1.018); z-index: 2; filter: brightness(1.08);
+    box-shadow: 0 10px 28px rgba(0,0,0,.5); }
+  .tile:active { transform: scale(.99); }
+  .tile:focus-visible { z-index: 3; }
+  .tile[aria-pressed="true"] { box-shadow: inset 0 0 0 3px var(--text); }
+  .tile b { display: block; font-size: .8125rem; font-weight: 700; letter-spacing: -.02em;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tile i { font-style: normal; font-size: .6875rem; font-weight: 600; opacity: .72; }
+  .tile .lbl { position: absolute; right: 9px; top: 9px; opacity: .5; font-size: .5625rem; }
+  .tile.sm { padding: 5px 7px; }
+  .tile.sm i, .tile.sm .lbl { display: none; }
+  .tile.xs b, .tile.xs i, .tile.xs .lbl { display: none; }
+
+  /* ------------------------------------------------------------ rows --- */
+  .row { display: grid; grid-template-columns: 38px 1fr 104px 38px; align-items: center;
+    gap: var(--s3); padding: var(--s3); margin-bottom: var(--s2);
+    border-radius: 14px; background: var(--panel-2); }
+  .row:hover { background: #22222c; }
+  .row[data-sel="1"] { box-shadow: inset 0 0 0 2.5px var(--lime); }
+  .row .body { text-align: left; min-width: 0; }
+  .row .nm { display: flex; align-items: center; gap: var(--s2); font-size: .9375rem;
+    font-weight: 700; letter-spacing: -.02em; }
+  .row .nm .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .pth { font-size: .6875rem; color: var(--text-3); white-space: nowrap; overflow: hidden;
+    text-overflow: ellipsis; direction: rtl; text-align: left; margin-top: 1px; }
+  .row .track { height: 5px; border-radius: 99px; margin-top: 7px; overflow: hidden; background: #0d0d13; }
+  .row .track i { display: block; height: 100%; border-radius: 99px; background: var(--tint); }
+  .row .sz { text-align: right; font-size: 1.0625rem; font-weight: 700; letter-spacing: -.03em;
+    font-variant-numeric: tabular-nums; }
+
+  .tick, .dig { width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center;
+    color: var(--text-3); transition: background .16s, color .16s, transform .14s ease-out; }
+  .tick em { width: 24px; height: 24px; border-radius: 8px; display: grid; place-items: center;
+    box-shadow: inset 0 0 0 2px var(--hair); color: transparent; }
+  .tick[aria-pressed="true"] em { background: var(--lime); box-shadow: none; color: var(--ink); }
+  .tick:hover, .dig:hover { background: #2b2b38; color: var(--text); }
+  .tick:active, .dig:active { transform: scale(.88); }
+  .tick:disabled { opacity: .28; cursor: not-allowed; }
+
+  .call { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px;
+    border-radius: 99px; font-size: .5625rem; font-weight: 700; letter-spacing: .1em;
+    text-transform: uppercase; }
+  .call.DROP { background: var(--v-CACHE); color: var(--vt-CACHE); }
+  .call.REVIEW { background: var(--v-MODELS); color: var(--vt-MODELS); }
+  .call.KEEP { background: var(--v-UNKNOWN); color: var(--vt-UNKNOWN); }
+
+  .actbar { display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap;
+    padding: 0 var(--s1) var(--s3); }
+
+  .badge { display: inline-flex; align-items: center; padding: 3px 9px; border-radius: 99px;
+    font-size: .5625rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
+    background: var(--tint); color: var(--tone); }
+
+  table { width: 100%; border-collapse: collapse; }
+  caption { text-align: left; padding: 0 0 var(--s3); font-size: .6875rem; color: var(--text-3); }
+  thead th { position: sticky; top: calc(var(--s3) * -1); z-index: 1; text-align: left;
+    padding: var(--s2) var(--s3); background: var(--panel); border-bottom: 2px solid var(--hair);
+    font-size: .625rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--text-3); }
+  thead th button { color: inherit; font: inherit; display: inline-flex; gap: 4px; align-items: center; }
+  tbody td { padding: var(--s3); border-bottom: 1px solid var(--hair); vertical-align: middle; }
+  tbody tr:hover { background: var(--panel-2); }
+  td.nm { max-width: 34ch; }
+  td.nm .t { font-weight: 700; font-size: .875rem; letter-spacing: -.02em; }
+  td.nm .p { font-size: .6875rem; color: var(--text-3); overflow: hidden; text-overflow: ellipsis;
+    white-space: nowrap; direction: rtl; text-align: left; }
+  td.num2 { text-align: right; font-size: 1rem; font-weight: 700; letter-spacing: -.03em;
+    font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td.act { text-align: right; }
+
+  /* ------------------------------------------------------------ rail --- */
+  .rail { overflow: auto; }
+  .reclaim { background: var(--cyan); color: var(--ink); padding: var(--s4); border-radius: var(--r); flex: none; }
+  .reclaim .v { font-size: clamp(2rem, 4.4vw, 3rem); margin: var(--s2) 0; }
+  .reclaim .act { display: flex; align-items: center; gap: var(--s2); }
+  .reclaim .btn { background: var(--ink); color: #fff; flex: 1; }
+
+  .insp { flex: 1; min-height: 190px; display: flex; flex-direction: column; }
+  .insp .top { padding: var(--s3) var(--s4); border-bottom: 1px solid var(--hair); flex: none; }
+  .insp h2 { margin: var(--s1) 0 2px; font-size: 1.0625rem; font-weight: 700; letter-spacing: -.03em;
+    word-break: break-word; }
+  .insp .path { font-size: .625rem; color: var(--text-3); word-break: break-all; }
+  .insp .headline { display: flex; align-items: baseline; gap: var(--s2); flex-wrap: wrap;
+    margin: var(--s2) 0 6px; }
+  .insp .v { font-size: clamp(1.5rem, 2.8vw, 2rem); }
+  .insp .note { font-size: .6875rem; color: var(--text-2); }
+  .insp .acts { display: flex; gap: var(--s1); align-items: center; margin-top: var(--s2); }
+  .insp .acts .btn { padding: 9px 12px; min-height: 36px; }
+  .insp .acts .btn.ico { width: 36px; padding: 0; }
+  .insp .acts .grow { margin-left: auto; }
+  .insp .files { flex: 1; min-height: 0; overflow: auto; padding: var(--s2) var(--s3) var(--s4); }
+  .insp .files > .lbl { position: sticky; top: calc(var(--s2) * -1); z-index: 1; display: block;
+    padding: var(--s2) var(--s1); background: var(--panel); color: var(--text-3); }
+  .fsum { display: flex; flex-wrap: wrap; gap: var(--s1); margin: var(--s2) 0 var(--s3); }
+  .fsum b { padding: 3px 9px; border-radius: 99px; background: var(--panel-2); color: var(--text-2);
+    font-size: .5625rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+  .fsum b.hot { background: var(--v-FILES); color: var(--vt-FILES); }
+  .fsum b.warn { background: var(--v-MODELS); color: var(--vt-MODELS); }
+
+  .fileline { display: grid; grid-template-columns: 18px 1fr auto; gap: var(--s2);
+    width: 100%; text-align: left; padding: 7px 6px; border-radius: 9px; align-items: baseline; }
+  .fileline:hover { background: var(--panel-2); }
+  .fileline:active { transform: scale(.995); }
+  .fileline .rank { font-size: .625rem; font-weight: 700; color: var(--text-3);
+    font-variant-numeric: tabular-nums; }
+  .fileline .nm { font-size: .75rem; font-weight: 600; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; }
+  .fileline .sz { font-size: .75rem; font-weight: 700; letter-spacing: -.02em;
+    font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .fileline .meta { grid-column: 2 / -1; display: flex; align-items: center; gap: 6px;
+    font-size: .5625rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--text-3); margin-top: 3px; }
+  .fileline .ext { padding: 1px 6px; border-radius: 5px; background: var(--panel-2); color: var(--text-2); }
+  .fileline .stale { color: var(--v-MODELS); }
+  .fileline .bar { flex: 1; height: 3px; border-radius: 99px; background: #0d0d13; overflow: hidden; min-width: 24px; }
+  .fileline .bar i { display: block; height: 100%; background: var(--v-FILES); border-radius: 99px; }
+
+  /* the key sits under the blocks it explains, not in a card of its own */
+  .legend { flex: none; display: flex; flex-wrap: wrap; gap: var(--s1);
+    padding: var(--s2) var(--s4) var(--s3); border-top: 1px solid var(--hair); }
+  .legend[hidden] { display: none; }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px;
+    border-radius: 99px; background: var(--panel-2); font-size: .5625rem; font-weight: 700;
+    letter-spacing: .1em; text-transform: uppercase; color: var(--text-2); }
+  .legend em { width: 9px; height: 9px; border-radius: 3px; background: var(--tint); }
+
+  .empty { display: grid; gap: var(--s3); place-items: center; text-align: center;
+    color: var(--text-2); font-size: .8125rem; padding: var(--s6) var(--s4); }
+  .empty strong { font-size: 1.125rem; font-weight: 700; letter-spacing: -.02em; color: var(--text); }
+  .empty p { margin: 0; max-width: 36ch; }
+
+  /* ------------------------------------------------------------ tray --- */
+  .tray { position: fixed; left: 50%; bottom: var(--s4); z-index: 50;
+    transform: translate(-50%, 24px) scale(.96); opacity: 0; pointer-events: none;
+    display: flex; align-items: center; gap: var(--s3);
+    padding: var(--s2) var(--s2) var(--s2) var(--s5); border-radius: 16px;
+    background: var(--lime); color: var(--ink); box-shadow: 0 18px 50px rgba(0,0,0,.6);
+    transition: transform .36s var(--ease), opacity .24s var(--ease);
+    max-width: calc(100vw - 2 * var(--s4)); }
+  .tray[data-on="1"] { transform: translate(-50%, 0) scale(1); opacity: 1; pointer-events: auto; }
+  .tray > div { min-width: 0; }
+  .tray b { font-size: 1rem; font-weight: 700; letter-spacing: -.03em; white-space: nowrap; }
+  .tray small { display: block; font-size: .625rem; font-weight: 700; letter-spacing: .08em;
+    text-transform: uppercase; opacity: .68; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tray .btn { flex: none; background: rgba(0,0,0,.14); color: var(--ink); }
+  .tray .btn.bad { background: var(--ink); color: #fff; }
+
+  /* ----------------------------------------------------------- sheet --- */
+  .scrim { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center;
+    background: rgba(3,3,6,.72); opacity: 0; pointer-events: none; transition: opacity .24s var(--ease); }
+  .scrim[data-on="1"] { opacity: 1; pointer-events: auto; }
+  .sheet { width: min(500px, calc(100vw - 2 * var(--s4))); padding: var(--s5);
+    border-radius: 22px; background: var(--panel); box-shadow: 0 30px 90px rgba(0,0,0,.7);
+    transform: scale(.93); filter: blur(7px); opacity: 0;
+    transition: transform .36s var(--ease), filter .3s var(--ease), opacity .24s var(--ease); }
+  .scrim[data-on="1"] .sheet { transform: scale(1); filter: blur(0); opacity: 1; }
+  .sheet h2 { margin: var(--s2) 0 var(--s2); font-size: 1.5rem; font-weight: 700; letter-spacing: -.04em; }
+  .sheet p { margin: 0 0 var(--s4); font-size: .8125rem; color: var(--text-2); }
+  .sheet ul { margin: 0 0 var(--s4); padding: 0; list-style: none; max-height: 34vh; overflow-y: auto; }
+  .sheet li { display: flex; justify-content: space-between; gap: var(--s3); font-size: .6875rem;
+    padding: var(--s2) 0; border-bottom: 1px solid var(--hair); font-weight: 600; }
+  .sheet li span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    direction: rtl; text-align: left; }
+  .sheet .acts { display: flex; justify-content: flex-end; gap: var(--s2); }
+
+  .toast { position: fixed; left: 50%; bottom: var(--s4); z-index: 70;
+    transform: translate(-50%, 24px); opacity: 0; pointer-events: none;
+    display: flex; align-items: center; gap: var(--s2);
+    padding: 13px 20px; border-radius: 14px; font-size: .8125rem; font-weight: 700;
+    background: var(--text); color: var(--ink); box-shadow: 0 18px 50px rgba(0,0,0,.6);
+    transition: transform .36s var(--ease), opacity .24s var(--ease); }
+  .toast[data-on="1"] { transform: translate(-50%, 0); opacity: 1; }
+  .toast[data-kind="bad"] { background: var(--bad); color: #fff; }
+
+  /* entry stagger - cheap, compositor-only, and it stops at the fold */
+  @keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+  .rise { animation: rise .42s var(--ease) both; }
+
+  /* ------------------------------------------------------ responsive --- */
+  @media (max-width: 1180px) { main { grid-template-columns: minmax(0,1fr) 300px; } }
+  @media (max-width: 980px) {
+    body { overflow: auto; }
+    main { grid-template-columns: minmax(0,1fr); }
+    .hero { min-height: 62vh; }
+    .rail { overflow: visible; }
+  }
+  @media (max-width: 620px) {
+    header { padding: var(--s2) var(--s2) 0; gap: var(--s2); }
+    main { padding: var(--s2); gap: var(--s2); }
+    .stats { grid-template-columns: 1fr 1fr; }
+    .stat.count { grid-column: span 2; min-height: 84px; }
+    .seg button span { display: none; }
+    .row { grid-template-columns: 38px 1fr 84px; }
+    .row .dig { display: none; }
+    .tray { left: var(--s2); right: var(--s2); max-width: none; transform: translateY(24px) scale(.98); }
+    .tray[data-on="1"] { transform: translateY(0) scale(1); }
+    .toast { left: var(--s2); right: var(--s2); transform: translateY(24px); }
+    .toast[data-on="1"] { transform: translateY(0); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+    .tile:hover, .chip:hover { transform: none; }
+    .sheet { filter: none; }
+    .scanbar i { width: 100%; opacity: .55; }
+  }
+</style>
+</head>
+<body>
+
+<svg class="sr" aria-hidden="true"><defs>
+  <g id="i-map"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="5" rx="1.5"/><rect x="13" y="10" width="8" height="11" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/></g>
+  <g id="i-table"><path d="M3 5h18M3 12h18M3 19h18M9 5v14"/></g>
+  <g id="i-fire"><path d="M12 3c3 4 6 5.5 6 9a6 6 0 1 1-12 0c0-2 1-3.2 2.5-4.5"/></g>
+  <g id="i-broom"><path d="M4 20l6-6M14 4l6 6-5 2-3-3zM9 13l2 2-4 5H4v-3z"/></g>
+  <g id="i-refresh"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 5v6h-6"/></g>
+  <g id="i-check"><path d="M4 12.5l5 5L20 6.5"/></g>
+  <g id="i-folder"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></g>
+  <g id="i-down"><path d="M9 6l6 6-6 6"/></g>
+  <g id="i-ext"><path d="M14 4h6v6M20 4l-8 8M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4"/></g>
+  <g id="i-trash"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/></g>
+  <g id="i-up"><path d="M19 12H5M11 6l-6 6 6 6"/></g>
+  <g id="i-copy"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></g>
+  <g id="i-sun"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.5 1.5M17.6 17.6l1.5 1.5M19.1 4.9l-1.5 1.5M6.4 17.6l-1.5 1.5"/></g>
+  <g id="i-moon"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></g>
+  <g id="i-arrow"><path d="M6 18L18 6M9 6h9v9"/></g>
+</defs></svg>
+
+<header>
+  <div class="word"><b>DiskLens</b><span>disk atlas</span></div>
+  <div class="drive">
+    <span class="lbl">drive</span>
+    <div class="menu">
+      <button id="driveBtn" aria-haspopup="listbox" aria-expanded="false" aria-controls="driveList">
+        <b id="sub">—</b>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"
+             style="transform:rotate(90deg)"><use href="#i-down"/></svg>
+      </button>
+      <ul id="driveList" role="listbox" aria-label="drive to index" hidden></ul>
+    </div>
+  </div>
+
+  <div class="seg" role="tablist" aria-label="view" style="margin-left:auto">
+    <button role="tab" data-view="map" aria-selected="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><use href="#i-map"/></svg><span>Map</span></button>
+    <button role="tab" data-view="table" aria-selected="false"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true"><use href="#i-table"/></svg><span>Table</span></button>
+    <button role="tab" data-view="hot" aria-selected="false"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true"><use href="#i-fire"/></svg><span>Hotspots</span></button>
+    <button role="tab" data-view="clean" aria-selected="false"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true"><use href="#i-broom"/></svg><span>Clean</span></button>
+    <button role="tab" data-view="dupes" aria-selected="false"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true"><use href="#i-copy"/></svg><span>Copies</span></button>
+  </div>
+
+  <button class="btn ghost ico" id="themeBtn" aria-label="Switch theme" title="Switch between ivory and dark"></button>
+  <button class="btn ghost" id="rescan"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><use href="#i-refresh"/></svg>Rescan</button>
+</header>
+
+<main>
+  <div class="col">
+    <section class="stats" aria-label="drive totals">
+      <div class="stat free rise" style="animation-delay:0ms">
+        <span class="lbl">Free</span>
+        <div class="v num" id="statFree">—</div>
+        <div class="ratio" id="bar" role="img" aria-label="disk usage"></div>
+      </div>
+      <div class="stat used rise" style="animation-delay:60ms">
+        <span class="lbl">Used</span>
+        <div class="v num" id="statUsed">—</div>
+        <div class="sub" id="capR">—</div>
+      </div>
+      <div class="stat count rise" style="animation-delay:120ms">
+        <span class="lbl" id="capL">Indexed</span>
+        <div class="v num" id="statCount">—</div>
+        <div class="scanbar" id="scanWrap" hidden><i></i></div>
+        <div class="sub" id="scanTxt">—</div>
+      </div>
+    </section>
+
+    <section class="card hero rise" style="animation-delay:180ms">
+      <div class="herobar">
+        <nav class="crumbs" id="crumbs" aria-label="folder path"></nav>
+        <div class="right">
+          <span class="lbl" id="heroHint">double-click a block to go deeper</span>
+          <span class="keys">
+            <kbd>1</kbd><kbd>5</kbd> views <kbd>&#9003;</kbd> up <kbd>space</kbd> select <kbd>r</kbd> rescan
+          </span>
+        </div>
+      </div>
+      <div id="map"></div>
+      <div class="scroll" id="scroll" hidden></div>
+      <div class="legend" id="legend"></div>
+    </section>
+  </div>
+
+  <div class="col rail">
+    <section class="reclaim rise" style="animation-delay:240ms">
+      <span class="lbl">Reclaimable right now</span>
+      <div class="v num" id="reclaimN">—</div>
+      <div class="act">
+        <button class="btn" id="reclaimGo">Open cleaner</button>
+        <button class="chip" id="reclaimChip" aria-label="Open cleaner">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-arrow"/></svg>
+        </button>
+      </div>
+    </section>
+
+    <section class="card insp rise" id="aside" aria-label="details" style="animation-delay:300ms"></section>
+  </div>
+</main>
+
+<div class="tray" id="tray" role="region" aria-label="cleanup selection">
+  <div><b id="trayN">0 selected</b><small id="trayS">—</small></div>
+  <button class="btn" id="trayClear">Clear</button>
+  <button class="btn bad" id="trayGo">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><use href="#i-trash"/></svg>Recycle bin
+  </button>
+</div>
+
+<div class="scrim" id="scrim">
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="shT">
+    <span class="lbl" style="color:var(--bad)">Destructive</span>
+    <h2 id="shT">Move to the Recycle Bin?</h2>
+    <p id="shP"></p>
+    <ul id="shL"></ul>
+    <div class="acts">
+      <button class="btn ghost" id="shNo">Cancel</button>
+      <button class="btn bad" id="shYes">Move to Recycle Bin</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+'use strict';
+
+const VERDICT = {
+  CACHE:   'rebuilds itself',
+  MODELS:  're-downloadable',
+  HEAVY:   'prune in its own tool',
+  DATA:    'your files',
+  SYSTEM:  'Windows needs it',
+  UNKNOWN: 'unclassified',
+  FILES:   'loose files'
+};
+const MAX_TILES = 60;        // past ~200 DOM nodes a treemap stops being readable
+const MIN_SHARE = 0.004;     // a tile under 0.4% of the frame is smaller than its own padding
+
+const key = v => VERDICT[v] ? v : 'UNKNOWN';
+const tint = v => `--tint:var(--v-${key(v)});--tone:var(--vt-${key(v)})`;
+const esc = s => String(s).replace(/[<>&"]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]));
+const icon = (id, o = {}) =>
+  `<svg width="${o.s || 15}" height="${o.s || 15}" viewBox="0 0 24 24" fill="none" stroke="currentColor" ` +
+  `stroke-width="${o.w || 1.9}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#${id}"/></svg>`;
+
+const fmt = b => {
+  if (b === null || b === undefined || b < 0) return '—';
+  const u = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let i = 0, n = b;
+  while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+  return (i >= 3 ? n.toFixed(1) : Math.round(n)) + ' ' + u[i];
+};
+const split = b => {               // big number + small unit, for the stat blocks
+  const s = fmt(b), i = s.lastIndexOf(' ');
+  return i < 0 ? [s, ''] : [s.slice(0, i), s.slice(i + 1)];
+};
+
+async function api(p, o) {
+  const r = await fetch(p, o);
+  if (!r.ok) throw new Error('server said ' + r.status);
+  return r.json();
+}
+
+const S = {
+  view: 'map', root: '', cwd: '', rows: [],
+  sort: { key: 'size', dir: -1 },
+  sel: new Map(), focus: null, scanning: true, reclaim: null,
+  drive: '', drives: [], dupes: null, dupeMin: 10, lastTick: null
+};
+const $ = id => document.getElementById(id);
+const big = (v, unit) => `${esc(v)}<span style="font-size:.42em;letter-spacing:0;margin-left:.15em">${esc(unit)}</span>`;
+
+/* ------------------------------------------------------- deep linking --- */
+function writeHash(push) {
+  const h = `#view=${S.view}` + (S.view === 'map' || S.view === 'table' ? `&path=${encodeURIComponent(S.cwd)}` : '');
+  if (location.hash === h) return;
+  if (push) history.pushState(null, '', h); else history.replaceState(null, '', h);
+}
+function readHash() {
+  const p = new URLSearchParams(location.hash.slice(1));
+  const v = p.get('view');
+  if (v && ['map', 'table', 'hot', 'clean', 'dupes'].includes(v)) S.view = v;
+  const path = p.get('path');
+  if (path) S.cwd = path;
+}
+
+/* ------------------------------------------------------------ status --- */
+function paintMeter(st) {
+  const total = st.used + st.free || 1;
+  $('bar').innerHTML =
+    `<i style="width:${(st.used / total * 100).toFixed(2)}%;background:var(--ink)"></i>` +
+    `<i style="width:${(st.free / total * 100).toFixed(2)}%;background:rgba(0,0,0,.25)"></i>`;
+  $('bar').setAttribute('aria-label', `${fmt(st.used)} used, ${fmt(st.free)} free on ${st.drive}`);
+  $('statFree').innerHTML = big(...split(st.free));
+  $('statUsed').innerHTML = big(...split(st.used));
+  $('capR').textContent = `${(st.used / total * 100).toFixed(0)}% of the drive`;
+  if (st.drive !== S.drive) { S.drive = st.drive; loadDrives(); }
+  $('sub').textContent = st.drive;
+}
+
+// The index is a point-in-time picture, so say how old it is rather than
+// letting the numbers imply they are live.
+function since(iso) {
+  const t = Date.parse(iso || '');
+  if (isNaN(t)) return 'not indexed yet';
+  const s = Math.max(0, (Date.now() - t) / 1000);
+  if (s < 90) return 'indexed just now';
+  if (s < 5400) return `indexed ${Math.round(s / 60)}m ago`;
+  if (s < 172800) return `indexed ${Math.round(s / 3600)}h ago`;
+  return `indexed ${Math.round(s / 86400)}d ago`;
+}
+
+async function poll() {
+  let st;
+  try { st = await api('/api/status'); }
+  catch { toast('Lost the DiskLens server — is its window still open?', 'bad', 8000); return; }
+
+  paintMeter(st);
+  S.hasIndex = !!st.hasIndex;
+  $('scanWrap').hidden = !st.running;
+  $('statCount').innerHTML = big(st.files.toLocaleString(), 'files');
+  $('capL').textContent = st.running ? 'Indexing' : 'Indexed';
+  $('scanTxt').textContent = st.running
+    ? st.current.replace(/^[A-Za-z]:\\/, '').slice(0, 46) || 'reading…'
+    : `${st.dirs.toLocaleString()} folders · ${since(st.indexedAt)}`;
+
+  if (st.running) { S.scanning = true; setTimeout(poll, 400); return; }
+  if (S.scanning) {
+    S.scanning = false;
+    S.root = st.root;
+    if (!S.cwd) S.cwd = st.root;
+    render();
+    loadReclaim();
+  }
+  setTimeout(poll, 4000);
+}
+
+async function loadDrives() {
+  let r;
+  try { r = await api('/api/drives'); } catch { return; }
+  S.drives = r.rows.filter(d => /^[A-Za-z]:$/.test(d.name));
+  $('driveList').innerHTML = S.drives.map(d => `
+    <li><button role="option" data-drive="${esc(d.name)}" aria-selected="${d.name === S.drive}">
+      <b>${esc(d.name)}</b><span>${fmt(d.free)} free of ${fmt(d.free + d.used)}</span>
+    </button></li>`).join('');
+  $('driveList').querySelectorAll('[data-drive]').forEach(b =>
+    b.onclick = () => { closeDriveMenu(); switchDrive(b.dataset.drive); });
+}
+
+function openDriveMenu(open) {
+  $('driveList').hidden = !open;
+  $('driveBtn').setAttribute('aria-expanded', String(open));
+}
+const closeDriveMenu = () => openDriveMenu(false);
+
+$('driveBtn').onclick = e => { e.stopPropagation(); openDriveMenu($('driveList').hidden); };
+addEventListener('click', closeDriveMenu);
+
+// Each drive keeps its own saved index, so switching back is instant too.
+async function switchDrive(d) {
+  if (d === S.drive) return;
+  try { await api('/api/rescan?drive=' + encodeURIComponent(d)); }
+  catch { toast('Could not switch drive', 'bad'); return; }
+  S.drive = d; S.cwd = ''; S.root = ''; S.rows = []; S.dupes = null; S.reclaim = null;
+  S.sel.clear(); paintSel();
+  $('reclaimN').textContent = '-';
+  $('reclaimGo').textContent = 'Indexing ' + d;
+  S.scanning = true; S.hasIndex = false;
+  $('aside').innerHTML = idleAside();
+  loadDrives();
+  render(); poll();
+}
+
+// What the Clean view would offer, shown up front so the number is never a surprise.
+async function loadReclaim() {
+  try {
+    const r = await api('/api/hotspots?min=50');
+    S.reclaim = r.rows.filter(x => (x.verdict === 'CACHE' || x.verdict === 'MODELS') && x.removable);
+    const sum = S.reclaim.reduce((s, x) => s + x.size, 0);
+    $('reclaimN').innerHTML = big(...split(sum));
+    $('reclaimGo').textContent = S.reclaim.length ? `Clean ${S.reclaim.length} folders` : 'Nothing to clean';
+  } catch { $('reclaimN').textContent = '—'; }
+}
+
+/* ----------------------------------------------------------- treemap --- */
+// Squarified treemap (Bruls, Huizing, van Wijk) - keeps tiles near-square so
+// small folders stay clickable instead of collapsing into hairlines.
+function squarify(items, x, y, w, h) {
+  const out = [];
+  const total = items.reduce((s, i) => s + i.value, 0);
+  if (total <= 0 || w <= 0 || h <= 0) return out;
+  const scale = (w * h) / total;
+  let rest = items.slice(), rx = x, ry = y, rw = w, rh = h;
+
+  const worst = (row, side) => {
+    const sum = row.reduce((s, i) => s + i.value * scale, 0);
+    const max = Math.max(...row.map(i => i.value * scale));
+    const min = Math.min(...row.map(i => i.value * scale));
+    const s2 = side * side;
+    return Math.max(s2 * max / (sum * sum), (sum * sum) / (s2 * min));
+  };
+
+  while (rest.length) {
+    const horizontal = rw >= rh;
+    const side = horizontal ? rh : rw;
+    const row = [rest[0]];
+    let k = 1;
+    while (k < rest.length && worst(row.concat(rest[k]), side) <= worst(row, side)) { row.push(rest[k]); k++; }
+    const sum = row.reduce((s, i) => s + i.value * scale, 0);
+    const thick = side > 0 ? sum / side : 0;
+    let off = 0;
+    for (const it of row) {
+      const len = thick > 0 ? (it.value * scale) / thick : 0;
+      out.push(horizontal ? { it, x: rx, y: ry + off, w: thick, h: len }
+                          : { it, x: rx + off, y: ry, w: len, h: thick });
+      off += len;
+    }
+    if (horizontal) { rx += thick; rw -= thick; } else { ry += thick; rh -= thick; }
+    rest = rest.slice(k);
+    if (rw <= 0.5 || rh <= 0.5) break;
+  }
+  // Float drift in the last row can push a tile a pixel past the frame; clip it.
+  for (const o of out) {
+    o.w = Math.max(0, Math.min(o.w, x + w - o.x));
+    o.h = Math.max(0, Math.min(o.h, y + h - o.y));
+  }
+  return out;
+}
+
+// Fold the tail into one honest "others" tile: anything under MIN_SHARE of the
+// folder would lay out thinner than its own padding and render as a blob.
+function capped(rows) {
+  const all = rows.filter(r => r.size > 0);
+  const total = all.reduce((s, r) => s + r.size, 0);
+  const head = [], tail = [];
+  for (const r of all) (head.length < MAX_TILES - 1 && r.size >= total * MIN_SHARE ? head : tail).push(r);
+  if (!tail.length) return head;
+  head.push({
+    name: `${tail.length} smaller ${tail.length === 1 ? 'item' : 'items'}`,
+    path: S.cwd, dir: false, verdict: 'UNKNOWN',
+    note: `Everything under ${fmt(tail[0].size)} in this folder, ${fmt(tail.reduce((s, r) => s + r.size, 0))} together. ` +
+          `Open the Table view to see them one by one.`,
+    size: tail.reduce((s, r) => s + r.size, 0), removable: false, aggregate: true
+  });
+  return head;
+}
+
+function drawMap(rows) {
+  const host = $('map');
+  host.innerHTML = '';
+  const list = capped(rows);
+  if (!list.length) {
+    host.innerHTML = emptyHTML('Nothing measurable here',
+      'This folder holds no files we can size — it may be empty or unreadable.',
+      S.cwd !== S.root ? 'up' : '');
+    wireEmpty(host);
+    return;
+  }
+
+  const W = host.clientWidth, H = host.clientHeight, G = 5;
+  for (const t of squarify(list.map(r => ({ value: r.size, row: r })), 0, 0, W, H)) {
+    if (t.w < 6 || t.h < 6) continue;
+    const r = t.it.row;
+    const el = document.createElement('button');
+    el.className = 'tile' + (t.w < 92 || t.h < 40 ? (t.w < 40 || t.h < 20 ? ' xs' : ' sm') : '');
+    el.style.cssText = `left:${t.x + G / 2}px;top:${t.y + G / 2}px;` +
+      `width:${Math.max(0, t.w - G)}px;height:${Math.max(0, t.h - G)}px;${tint(r.verdict)}`;
+    el.setAttribute('aria-pressed', S.sel.has(r.path) && !r.aggregate ? 'true' : 'false');
+    el.setAttribute('aria-label', `${r.name}, ${fmt(r.size)}, ${r.verdict}. ${r.note}`);
+    el.title = `${r.path}\n${fmt(r.size)} · ${r.verdict} — ${r.note}` +
+      (r.dir ? '\n\nEnter or double-click to open · Space to select' : '');
+    el.innerHTML = `<span class="lbl">${r.verdict}</span><b>${esc(r.name)}</b><i>${fmt(r.size)}</i>`;
+    el.onpointerdown = () => inspect(r);
+    el.ondblclick = () => { if (r.dir) go(r.path, true); };
+    el.onkeydown = e => {
+      if (e.key === 'Enter' && r.dir) { e.preventDefault(); go(r.path, true); }
+      if (e.key === ' ') { e.preventDefault(); toggle(r); }
+    };
+    host.appendChild(el);
+  }
+}
+
+/* ------------------------------------------------------------- table --- */
+// The accessible primary view of the same numbers: a treemap alone grades C.
+function drawTable(rows) {
+  const host = $('scroll');
+  if (!rows.length) {
+    host.innerHTML = emptyHTML('Nothing to list', 'This folder has no measurable contents.',
+      S.cwd !== S.root ? 'up' : '');
+    wireEmpty(host);
+    return;
+  }
+  const k = S.sort.key, d = S.sort.dir;
+  const sorted = rows.slice().sort((a, b) =>
+    (k === 'name' ? a.name.localeCompare(b.name) : k === 'verdict' ? a.verdict.localeCompare(b.verdict) : a.size - b.size) * d);
+  const max = rows.reduce((m, r) => Math.max(m, r.size), 0) || 1;
+  const arrow = key => S.sort.key === key ? (d < 0 ? ' ↓' : ' ↑') : '';
+  const aria = key => S.sort.key === key ? (d < 0 ? 'descending' : 'ascending') : 'none';
+
+  host.innerHTML = `
+    <table>
+      <caption>${esc(S.cwd)} — ${rows.length} entries, the same numbers as the map.</caption>
+      <thead><tr>
+        <th scope="col" style="width:38px"><span class="sr">select</span></th>
+        <th scope="col" aria-sort="${aria('name')}"><button data-sort="name">Name${arrow('name')}</button></th>
+        <th scope="col" aria-sort="${aria('verdict')}"><button data-sort="verdict">Verdict${arrow('verdict')}</button></th>
+        <th scope="col" style="text-align:right" aria-sort="${aria('size')}"><button data-sort="size">Size${arrow('size')}</button></th>
+        <th scope="col" style="width:44px"><span class="sr">open</span></th>
+      </tr></thead>
+      <tbody>${sorted.map(r => `
+        <tr data-path="${esc(r.path)}">
+          <td>${tickHTML(r)}</td>
+          <td class="nm"><div class="t">${esc(r.name)}</div><div class="p">${esc(r.path)}</div>
+            <div class="track" style="${tint(r.verdict)};height:4px;border-radius:99px;margin-top:6px;overflow:hidden;background:#0d0d13">
+              <i style="display:block;height:100%;background:var(--tint);width:${(r.size / max * 100).toFixed(1)}%"></i></div></td>
+          <td><span class="badge" style="${tint(r.verdict)}">${r.verdict}</span> ${callChip(r)}
+            <div style="font-size:.6875rem;color:var(--text-3);margin-top:4px">${esc(advice(r).why)}</div></td>
+          <td class="num2">${fmt(r.size)}</td>
+          <td class="act">${r.dir ? `<button class="dig" data-act="open" aria-label="Open ${esc(r.name)}">${icon('i-down')}</button>` : ''}</td>
+        </tr>`).join('')}</tbody>
+    </table>`;
+
+  host.querySelectorAll('[data-sort]').forEach(b => b.onclick = () => {
+    const key = b.dataset.sort;
+    S.sort = { key, dir: S.sort.key === key ? -S.sort.dir : (key === 'size' ? -1 : 1) };
+    drawTable(S.rows);
+  });
+  wireRows(host, sorted, 'tr');
+}
+
+/* -------------------------------------------------------------- rows --- */
+function tickHTML(r) {
+  return `<button class="tick" data-act="tick" aria-pressed="${S.sel.has(r.path) ? 'true' : 'false'}"
+    ${r.removable ? '' : 'disabled'} aria-label="${r.removable ? 'Select ' + esc(r.name) + ' for cleanup' : esc(r.name) + ' is protected'}"
+    ><em>${icon('i-check', { s: 14, w: 2.6 })}</em></button>`;
+}
+
+function drawCards(rows, kind) {
+  const host = $('scroll');
+  if (!rows.length) {
+    host.innerHTML = kind === 'clean'
+      ? emptyHTML('Nothing left to clean', 'No cache or model folder on this drive is big enough to bother with. Caches refill as you work — look again after a few builds.', 'hot')
+      : emptyHTML('No hotspots', 'Nothing over the size threshold. Try the map and browse by hand.', 'map');
+    wireEmpty(host);
+    return;
+  }
+  const drops = rows.filter(r => r.removable && advice(r).tag === 'DROP');
+  const dropSum = drops.reduce((a, r) => a + r.size, 0);
+  const max = rows.reduce((m, r) => Math.max(m, r.size), 0) || 1;
+  host.innerHTML = `
+    <div class="actbar">
+      ${drops.length ? `<button class="btn lime" data-pick="drops">Select the ${drops.length} marked drop · ${fmt(dropSum)}</button>` : ''}
+      <button class="btn ghost" data-pick="all">Select every unprotected row</button>
+      <button class="btn ghost" data-pick="none">Clear</button>
+      <span class="lbl" style="color:var(--text-3)">shift-click a tick to take a range</span>
+    </div>` + rows.map((r, i) => `
+    <div class="row rise" style="animation-delay:${Math.min(i * 22, 260)}ms;${tint(r.verdict)}"
+         data-path="${esc(r.path)}" data-sel="${S.sel.has(r.path) ? 1 : 0}">
+      ${tickHTML(r)}
+      <button class="body" data-act="pick">
+        <div class="nm"><span class="t">${esc(r.name)}</span>
+          <span class="badge" style="${tint(r.verdict)}">${r.verdict}</span>
+          ${callChip(r)}</div>
+        <div class="pth">${esc(advice(r).why)} · ${esc(r.path)}</div>
+        <div class="track"><i style="width:${(r.size / max * 100).toFixed(1)}%"></i></div>
+      </button>
+      <div class="sz">${fmt(r.size)}</div>
+      <button class="dig" data-act="open" aria-label="Open ${esc(r.name)} in the map">${icon('i-down')}</button>
+    </div>`).join('');
+  host.querySelectorAll('[data-pick]').forEach(b => b.onclick = () => {
+    const what = b.dataset.pick;
+    if (what === 'none') S.sel.clear();
+    else for (const r of (what === 'drops' ? drops : rows.filter(x => x.removable))) S.sel.set(r.path, r.size);
+    paintSel();
+    drawCards(rows, kind);
+  });
+  wireRows(host, rows, '.row');
+}
+
+/* ------------------------------------------------------------ copies --- */
+async function startDupes() {
+  const scope = S.drive || 'C:';
+  try { await api(`/api/dupes/start?min=${S.dupeMin}&path=${encodeURIComponent(scope)}`); }
+  catch { toast('Could not start the copy scan', 'bad'); return; }
+  S.dupes = { running: true, rows: [], seen: 0, hashed: 0, wasted: 0 };
+  render();
+  pollDupes();
+}
+
+async function pollDupes() {
+  let d;
+  try { d = await api('/api/dupes'); } catch { return; }
+  S.dupes = d;
+  if (S.view === 'dupes') drawDupes(d);
+  if (d.running) setTimeout(pollDupes, 500);
+}
+
+function drawDupes(d) {
+  const host = $('scroll');
+  const bar = `
+    <div class="dupebar">
+      <button class="btn lime" data-d="scan">${icon('i-copy')}${d && d.rows.length ? 'Scan again' : 'Find copies'}</button>
+      <select data-d="min" aria-label="smallest file to compare">
+        ${[1, 10, 50, 200].map(m => `<option value="${m}" ${m === S.dupeMin ? 'selected' : ''}>from ${m} MB</option>`).join('')}
+      </select>
+      ${d && d.rows.length ? `<button class="btn" data-d="all">Select every copy but the first</button>` : ''}
+      <span class="lbl" style="color:var(--text-3)">${esc(S.drive || '')} · same bytes, different places</span>
+    </div>`;
+
+  if (!d || (!d.running && !d.done)) {
+    host.innerHTML = bar + emptyHTML('Find the same file twice',
+      'Files are bucketed by size first, then only the collisions are read, so a whole drive takes a minute or two.', '');
+    wireDupes(host);
+    return;
+  }
+  if (d.running) {
+    host.innerHTML = bar + `<div class="empty"><strong>Comparing…</strong>
+      <p>${d.seen.toLocaleString()} files seen · ${d.hashed.toLocaleString()} read in full<br>
+      <span style="font-size:.6875rem;color:var(--text-3)">${esc((d.current || '').slice(0, 70))}</span></p></div>`;
+    wireDupes(host);
+    return;
+  }
+  if (!d.rows.length) {
+    host.innerHTML = bar + emptyHTML('No copies over ' + S.dupeMin + ' MB',
+      'Nothing on this drive is stored twice at that size. Try a smaller threshold.', '');
+    wireDupes(host);
+    return;
+  }
+
+  host.innerHTML = bar +
+    `<p class="lbl" style="color:var(--v-FILES);padding:0 var(--s1) var(--s3)">
+      ${d.rows.length} groups · ${fmt(d.wasted)} held by duplicates</p>` +
+    d.rows.map((g, i) => `
+      <div class="dupe rise" style="animation-delay:${Math.min(i * 20, 240)}ms">
+        <header>
+          <div><div class="nm">${esc(g.name)}</div>
+            <div class="meta">${fmt(g.size)} each · ${g.copies} copies</div></div>
+          <div class="waste">${fmt(g.wasted)}<div class="meta" style="color:var(--text-3)">recoverable</div></div>
+        </header>
+        ${g.paths.map((p, n) => `
+          <div class="copy" data-path="${esc(p)}">
+            ${n === 0 ? '<span class="keep">keep</span>'
+              : `<button class="tick" data-dupe="${esc(p)}" data-size="${g.size}"
+                   aria-pressed="${S.sel.has(p) ? 'true' : 'false'}"
+                   aria-label="Select this copy of ${esc(g.name)}"><em>${icon('i-check', { s: 14, w: 2.6 })}</em></button>`}
+            <span class="p">${esc(p)}</span>
+            <button class="dig" data-reveal="${esc(p)}" aria-label="Show this copy in Explorer">${icon('i-ext', { s: 14 })}</button>
+          </div>`).join('')}
+      </div>`).join('');
+  wireDupes(host);
+}
+
+function wireDupes(host) {
+  host.querySelectorAll('[data-d]').forEach(el => {
+    if (el.dataset.d === 'min') { el.onchange = e => { S.dupeMin = +e.target.value; }; return; }
+    el.onclick = () => {
+      if (el.dataset.d === 'scan') return startDupes();
+      if (el.dataset.d === 'all') {
+        for (const g of S.dupes.rows) for (const p of g.paths.slice(1)) S.sel.set(p, g.size);
+        paintSel(); drawDupes(S.dupes);
+      }
+    };
+  });
+  host.querySelectorAll('[data-dupe]').forEach(b => b.onclick = () => {
+    const p = b.dataset.dupe;
+    if (S.sel.has(p)) S.sel.delete(p); else S.sel.set(p, +b.dataset.size);
+    paintSel(); drawDupes(S.dupes);
+  });
+  host.querySelectorAll('[data-reveal]').forEach(b => b.onclick = () =>
+    api('/api/reveal?path=' + encodeURIComponent(b.dataset.reveal)).catch(() => {}));
+}
+
+function wireRows(host, rows, sel) {
+  host.querySelectorAll(sel).forEach(el => {
+    const r = rows.find(x => x.path === el.dataset.path);
+    if (!r) return;
+    el.querySelectorAll('[data-act]').forEach(b => b.onclick = e => {
+      e.stopPropagation();
+      if (b.dataset.act === 'tick' && e.shiftKey && S.lastTick) return range(rows, S.lastTick, r);
+      if (b.dataset.act === 'tick') { S.lastTick = r.path; toggle(r); }
+      if (b.dataset.act === 'pick') inspect(r);
+      if (b.dataset.act === 'open') go(r.path, true);
+    });
+    el.onpointerdown = e => { if (!e.target.closest('[data-act]')) inspect(r); };
+  });
+}
+
+function emptyHTML(title, body, action) {
+  const label = { up: 'Go up one folder', map: 'Open the map', hot: 'Show hotspots' }[action];
+  return `<div class="empty">${icon('i-folder', { s: 28 })}<strong>${esc(title)}</strong><p>${esc(body)}</p>` +
+    (label ? `<button class="btn lime" data-empty="${action}">${label}</button>` : '') + `</div>`;
+}
+function wireEmpty(host) {
+  const b = host.querySelector('[data-empty]');
+  if (!b) return;
+  b.onclick = () => ({ up, map: () => setView('map'), hot: () => setView('hot') })[b.dataset.empty]();
+}
+
+/* ----------------------------------------------------------- inspect --- */
+async function inspect(r) {
+  S.focus = r;
+  $('aside').innerHTML = `
+    <div class="top" style="${tint(r.verdict)}">
+      <h2>${esc(r.name)}</h2>
+      <div class="path">${esc(r.path)}</div>
+      <div class="headline">
+        <span class="v num">${big(...split(r.size))}</span>
+        <span class="badge" style="${tint(r.verdict)}">${r.verdict}</span>
+      </div>
+      <div class="headline" style="margin:0 0 var(--s2)">
+        ${callChip(r)}<span class="note">${esc(advice(r).why)}</span>
+      </div>
+      <div class="note">${esc(r.note)}</div>
+      <div class="acts">
+        ${r.aggregate ? '' : `<button class="btn ico" data-a="open" aria-label="Show in Explorer" title="Show in Explorer">${icon('i-ext')}</button>`}
+        ${r.dir ? `<button class="btn ico" data-a="in" aria-label="Look inside" title="Look inside">${icon('i-down')}</button>` : ''}
+        ${r.dir && !r.aggregate ? `<button class="btn ico" data-a="refresh" aria-label="Re-read this folder from disk" title="Re-read this folder from disk">${icon('i-refresh')}</button>` : ''}
+        ${r.aggregate ? '' : `<button class="btn grow ${r.removable ? 'bad' : ''}" data-a="sel" ${r.removable ? '' : 'disabled'}>
+          ${icon('i-trash')}${S.sel.has(r.path) ? 'Deselect' : 'Select'}</button>`}
+      </div>
+    </div>
+    <div class="files" id="pv"><span class="lbl" style="color:var(--text-3)">Biggest files inside</span>
+      <div class="empty" style="padding:var(--s4) 0">reading…</div></div>`;
+
+  $('aside').querySelectorAll('[data-a]').forEach(b => b.onclick = () => {
+    const act = b.dataset.a;
+    if (act === 'open') api('/api/reveal?path=' + encodeURIComponent(r.path)).catch(() => {});
+    if (act === 'in') go(r.path, true);
+    if (act === 'sel') { toggle(r); inspect(r); }
+    if (act === 'refresh') refresh(r);
+  });
+
+  if (r.aggregate) {
+    $('pv').innerHTML = `<span class="lbl" style="color:var(--text-3)">What is in there</span>
+      <p style="font-size:.75rem;color:var(--text-2)">${esc(r.note)}</p>`;
+    return;
+  }
+
+  let pv;
+  try { pv = await api('/api/preview?path=' + encodeURIComponent(r.path)); }
+  catch { if ($('pv')) $('pv').innerHTML = '<div class="empty">Could not read it.</div>'; return; }
+  if (!$('pv') || S.focus !== r) return;
+  $('pv').innerHTML = filesHTML(pv, r.size);
+  $('pv').querySelectorAll('[data-file]').forEach(b => b.onclick = () =>
+    api('/api/reveal?path=' + encodeURIComponent(b.dataset.file)).catch(() => {}));
+}
+
+// How old, in words. Anything past a year is the strongest hint on the panel
+// that a big file is dead weight, so it gets called out rather than buried in
+// an ISO date nobody reads.
+function age(date) {
+  const d = Date.parse(date + 'T12:00:00');
+  if (isNaN(d)) return { text: date, stale: false };
+  const days = Math.max(0, Math.round((Date.now() - d) / 86400000));
+  if (days <= 1) return { text: 'today', stale: false };
+  if (days < 31) return { text: days + 'd old', stale: false };
+  if (days < 365) return { text: Math.round(days / 30) + 'mo old', stale: false };
+  const y = (days / 365).toFixed(days < 730 ? 1 : 0).replace(/\.0$/, '');
+  return { text: y + 'y old', stale: true };
+}
+const extOf = n => {
+  const i = n.lastIndexOf('.');
+  return i > 0 && i < n.length - 1 && n.length - i <= 9 ? n.slice(i + 1).toUpperCase() : 'FILE';
+};
+
+// Is this worth keeping? The only honest evidence on disk is what kind of
+// folder it is and when anything in it was last written. Say which, so the call
+// can be argued with rather than trusted.
+const DAY = 86400000;
+function advice(r) {
+  const days = r.fresh ? Math.round((Date.now() - Date.parse(r.fresh + 'T12:00:00')) / DAY) : null;
+  const when = days === null ? 'never read' : days < 1 ? 'written today'
+    : days < 31 ? `written ${days}d ago`
+    : days < 365 ? `untouched ${Math.round(days / 30)} months`
+    : `untouched ${(days / 365).toFixed(days < 730 ? 1 : 0).replace(/\.0$/, '')} years`;
+
+  if (!r.removable) return { tag: 'KEEP', why: 'protected — ' + VERDICT[key(r.verdict)], days };
+  if (r.verdict === 'DATA') return { tag: 'KEEP', why: 'your own files · ' + when, days };
+  if (r.verdict === 'HEAVY') return { tag: 'REVIEW', why: 'shrink it in its own tool · ' + when, days };
+  if (r.verdict === 'CACHE') return days !== null && days > 30
+    ? { tag: 'DROP', why: 'cache, ' + when, days }
+    : { tag: 'REVIEW', why: 'cache still in use · ' + when, days };
+  if (r.verdict === 'MODELS') return days !== null && days > 90
+    ? { tag: 'DROP', why: 'unused model, ' + when, days }
+    : { tag: 'REVIEW', why: 'model in use · ' + when, days };
+  if (days !== null && days > 365 && r.size >= (1 << 30))
+    return { tag: 'DROP', why: 'big and ' + when, days };
+  return { tag: 'REVIEW', why: when, days };
+}
+const callChip = r => { const a = advice(r); return `<span class="call ${a.tag}" title="${esc(a.why)}">${a.tag}</span>`; };
+
+function filesHTML(pv, folderSize) {
+  const head = `<span class="lbl" style="color:var(--text-3)">Biggest files inside</span>`;
+  if (!pv.files.length) return head + '<div class="empty" style="padding:var(--s4) 0">No readable files in here.</div>';
+
+  const top = pv.files.reduce((s, f) => s + f.size, 0);
+  const share = folderSize > 0 ? Math.round(top / folderSize * 100) : 0;
+  const biggest = pv.files[0].size || 1;
+  const stale = pv.files.filter(f => age(f.date).stale);
+  const staleSum = stale.reduce((s, f) => s + f.size, 0);
+
+  return head + `
+    <div class="fsum">
+      <b class="hot">${pv.files.length} files = ${fmt(top)}</b>
+      ${folderSize > 0 ? `<b>${share}% of this folder</b>` : ''}
+      ${stale.length ? `<b class="warn">${fmt(staleSum)} untouched 1y+</b>` : ''}
+      ${pv.truncated ? '<b>sampled, folder too big to read whole</b>' : ''}
+    </div>` +
+    pv.files.map((f, i) => {
+      const a = age(f.date);
+      return `<button class="fileline" data-file="${esc(f.path)}"
+        title="${esc(f.path)}&#10;${fmt(f.size)} · ${esc(f.date)}&#10;&#10;Click to show it in Explorer">
+        <span class="rank">${i + 1}</span>
+        <span class="nm">${esc(f.name)}</span>
+        <span class="sz">${fmt(f.size)}</span>
+        <span class="meta">
+          <span class="ext">${esc(extOf(f.name))}</span>
+          <span class="bar"><i style="width:${(f.size / biggest * 100).toFixed(1)}%"></i></span>
+          <span class="${a.stale ? 'stale' : ''}">${esc(a.text)}</span>
+        </span></button>`;
+    }).join('');
+}
+
+const idleAside = () => `<div class="empty" style="margin:auto">${icon('i-folder', { s: 28 })}
+  <strong>Nothing selected</strong>
+  <p>Click any block or row to see what is inside it, which files are biggest, and whether it is safe to remove.</p></div>`;
+
+// Re-read one folder instead of the whole drive. Nothing on disk tells us a
+// file merely grew (a folder's mtime does not move for that), so this is asked
+// for, never guessed.
+async function refresh(r) {
+  toast(`Re-reading ${r.name}…`, 'ok', 30000);
+  let res;
+  try { res = await api('/api/refresh?path=' + encodeURIComponent(r.path)); }
+  catch (e) { toast('Refresh failed — ' + (e.message || e), 'bad'); return; }
+  await render();
+  loadReclaim();
+  if (res.gone) { toast(`${r.name} is no longer on disk`, 'bad'); return; }
+  const diff = res.size - r.size;
+  toast(diff === 0 ? `${r.name} unchanged at ${fmt(res.size)}`
+    : `${r.name} is now ${fmt(res.size)} (${diff > 0 ? '+' : '−'}${fmt(Math.abs(diff))})`);
+  const fresh = S.rows.find(x => x.path === r.path);
+  inspect(fresh || { ...r, size: res.size });
+}
+
+// Shift-click: take everything between the last tick and this one, the way a
+// file manager does. Protected rows in the span are skipped, not refused loudly.
+function range(rows, fromPath, to) {
+  const a = rows.findIndex(x => x.path === fromPath);
+  const b = rows.findIndex(x => x.path === to.path);
+  if (a < 0 || b < 0) return;
+  for (const r of rows.slice(Math.min(a, b), Math.max(a, b) + 1)) {
+    if (r.removable) S.sel.set(r.path, r.size);
+  }
+  S.lastTick = to.path;
+  paintSel();
+  render(true);
+}
+
+/* --------------------------------------------------------- selection --- */
+function toggle(r) {
+  if (!r.removable) { toast(`${r.name} is protected — ${VERDICT[key(r.verdict)]}`, 'bad'); return; }
+  if (S.sel.has(r.path)) S.sel.delete(r.path); else S.sel.set(r.path, r.size);
+  paintSel();
+  render(true);
+}
+function paintSel() {
+  const n = S.sel.size;
+  const sum = [...S.sel.values()].reduce((a, b) => a + (b > 0 ? b : 0), 0);
+  $('tray').dataset.on = n ? '1' : '0';
+  $('trayN').textContent = `${fmt(sum)} in ${n} item${n === 1 ? '' : 's'}`;
+  $('trayS').textContent = 'goes to the recycle bin, not deleted';
+}
+
+/* ----------------------------------------------------------- routing --- */
+const SUBTITLE = {
+  hot: 'Biggest folders anywhere on the drive',
+  clean: 'Caches and models that are safe to drop',
+  dupes: 'The same file kept in more than one place'
+};
+
+function crumbs() {
+  const host = $('crumbs');
+  if (S.view !== 'map' && S.view !== 'table') {
+    host.innerHTML = `<span class="lbl" style="color:var(--text-3)">${SUBTITLE[S.view] || ''}</span>`;
+    return;
+  }
+  if (!S.cwd) {
+    host.innerHTML = `<span class="lbl" style="color:var(--text-3)">indexing ${esc(S.drive)}</span>`;
+    return;
+  }
+  const parts = S.cwd.replace(/\\+$/, '').split('\\');
+  host.innerHTML =
+    (S.cwd.replace(/\\+$/, '') !== S.root.replace(/\\+$/, '')
+      ? `<button data-up="1" aria-label="Up one folder">${icon('i-up', { s: 13 })}</button>` : '') +
+    parts.map((p, i) => `<button data-i="${i}">${esc(p || S.root)}</button>` +
+      (i < parts.length - 1 ? `<i aria-hidden="true">/</i>` : '')).join('');
+  host.querySelectorAll('button').forEach(b => b.onclick = () => {
+    if (b.dataset.up) return up();
+    go(parts.slice(0, +b.dataset.i + 1).join('\\') + '\\', true);
+  });
+}
+
+function legend() {
+  $('legend').innerHTML = Object.entries(VERDICT)
+    .map(([k, v]) => `<span style="${tint(k)}"><em></em>${k}</span>`).join('');
+}
+
+function up() {
+  const parent = S.cwd.replace(/\\+$/, '').split('\\').slice(0, -1).join('\\');
+  if (parent.length >= 2) go(parent + '\\', true);
+}
+function go(path, push) {
+  S.cwd = path;
+  if (S.view !== 'map' && S.view !== 'table') S.view = 'map';
+  syncTabs(); writeHash(push); render();
+}
+function setView(v) { S.view = v; syncTabs(); writeHash(true); render(); }
+
+async function render(keep) {
+  crumbs();
+  const isMap = S.view === 'map';
+  $('map').hidden = !isMap;
+  $('scroll').hidden = isMap;
+  $('legend').hidden = !isMap;
+  $('heroHint').textContent = isMap ? 'double-click a block to go deeper'
+    : S.view === 'table' ? 'sortable · keyboard friendly'
+    : S.view === 'hot' ? 'where the space actually went'
+    : S.view === 'dupes' ? 'the same bytes, stored twice' : 'tick what you want gone';
+
+  // A scan from an earlier session is still on the server - pick it up.
+  if (S.view === 'dupes') { if (!S.dupes) pollDupes(); drawDupes(S.dupes); return; }
+  if (!$('aside').innerHTML.trim()) $('aside').innerHTML = idleAside();
+
+  if (S.scanning && !S.hasIndex && !keep) {
+    const msg = emptyHTML('Walking the drive',
+      'Every folder is sized once. The map, the hotspots and the cleaner all read that single pass, so this is the only wait.', '');
+    $('map').innerHTML = msg; $('scroll').innerHTML = msg;
+    return;
+  }
+
+  try {
+    if (isMap || S.view === 'table') {
+      if (!keep) S.rows = await rowsFor(S.cwd);
+      isMap ? drawMap(S.rows) : drawTable(S.rows);
+      return;
+    }
+    if (!keep) {
+      const r = await api('/api/hotspots?min=' + (S.view === 'hot' ? 500 : 50));
+      const rows = r.rows.map(x => ({ ...x, dir: true }));   // every hotspot is a folder
+      S.rows = S.view === 'hot' ? rows
+        : rows.filter(x => (x.verdict === 'CACHE' || x.verdict === 'MODELS') && x.removable)
+              .sort((a, b) => (advice(b).tag === 'DROP') - (advice(a).tag === 'DROP') || b.size - a.size);
+    }
+    drawCards(S.rows, S.view);
+  } catch (e) {
+    const host = isMap ? $('map') : $('scroll');
+    host.innerHTML = emptyHTML('Could not reach the scanner', String(e.message || e), 'map');
+    wireEmpty(host);
+  }
+}
+
+// A folder with no subfolders is one giant "files here" block, which tells you
+// nothing. Show its actual files instead - same tiles, same rows, file-sized.
+async function rowsFor(path) {
+  const rows = (await api('/api/children?path=' + encodeURIComponent(path))).rows;
+  if (rows.length !== 1 || rows[0].dir) return rows;
+
+  const own = rows[0].size;
+  const pv = await api('/api/preview?path=' + encodeURIComponent(path));
+  if (!pv.files.length) return rows;
+
+  const files = pv.files.map(f => ({
+    name: f.name, path: f.path, size: f.size, dir: false, verdict: 'FILES',
+    note: `File, last written ${f.date}`, removable: false
+  }));
+  const rest = own - files.reduce((s, f) => s + f.size, 0);
+  if (rest > own * 0.01) files.push({
+    name: `${pv.truncated ? 'the rest of the' : 'smaller'} files`,
+    path, dir: false, size: rest, verdict: 'UNKNOWN', removable: false, aggregate: true,
+    note: `Everything in this folder outside the ${files.length} biggest files.`
+  });
+  return files;
+}
+
+function syncTabs() {
+  document.querySelectorAll('[role=tab]').forEach(b =>
+    b.setAttribute('aria-selected', String(b.dataset.view === S.view)));
+}
+document.querySelectorAll('[role=tab]').forEach(b => b.onclick = () => setView(b.dataset.view));
+$('reclaimGo').onclick = $('reclaimChip').onclick = () => setView('clean');
+
+$('rescan').onclick = async () => {
+  try { await api('/api/rescan'); } catch { toast('Rescan failed', 'bad'); return; }
+  S.scanning = true; S.sel.clear(); paintSel(); render(); poll();
+};
+
+/* ------------------------------------------------------------ delete --- */
+const scrim = $('scrim');
+$('trayClear').onclick = () => { S.sel.clear(); paintSel(); render(true); };
+$('shNo').onclick = () => closeSheet();
+scrim.onclick = e => { if (e.target === scrim) closeSheet(); };
+
+let lastFocus = null;
+function closeSheet() { scrim.dataset.on = '0'; if (lastFocus) lastFocus.focus(); }
+
+$('trayGo').onclick = () => {
+  const sum = [...S.sel.values()].reduce((a, b) => a + (b > 0 ? b : 0), 0);
+  $('shP').textContent =
+    `${S.sel.size} item(s), about ${fmt(sum)}. They go to the Recycle Bin, so you can put them ` +
+    `back until you empty it. Caches rebuild on their own — the next build or install will be slower once.`;
+  $('shL').innerHTML = [...S.sel.entries()]
+    .map(([p, s]) => `<li><span>${esc(p)}</span><span>${fmt(s)}</span></li>`).join('');
+  lastFocus = document.activeElement;
+  scrim.dataset.on = '1';
+  $('shYes').focus();
+};
+
+$('shYes').onclick = async () => {
+  const paths = [...S.sel.keys()];
+  closeSheet();
+  toast('Moving to the Recycle Bin…', 'ok', 60000);
+  let r;
+  try {
+    r = await api('/api/recycle', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ paths })
+    });
+  } catch (e) { toast('Nothing was removed — ' + (e.message || e), 'bad', 7000); return; }
+  S.sel.clear(); paintSel();
+  toast(`Recovered ${fmt(r.freed)} from ${r.removed.length} item(s)` +
+        (r.refused.length ? ` · ${r.refused.length} refused` : ''), r.refused.length ? 'bad' : 'ok', 5000);
+  // The server already patched the index for what it removed - no rescan.
+  $('aside').innerHTML = idleAside();
+  if (S.dupes && S.dupes.rows) {
+    const gone = new Set(r.removed);
+    S.dupes.rows = S.dupes.rows
+      .map(g => ({ ...g, paths: g.paths.filter(p => !gone.has(p)) }))
+      .filter(g => g.paths.length > 1);
+  }
+  await render();
+  loadReclaim();
+};
+
+let toastT;
+function toast(msg, kind = 'ok', ms = 3200) {
+  const t = $('toast');
+  t.innerHTML = (kind === 'bad' ? '' : icon('i-check', { w: 2.6 })) + `<span>${esc(msg)}</span>`;
+  t.dataset.kind = kind; t.dataset.on = '1';
+  clearTimeout(toastT);
+  toastT = setTimeout(() => t.dataset.on = '0', ms);
+}
+
+/* ------------------------------------------------------------- theme --- */
+// Stored choice wins; otherwise follow the OS. Storage can throw in a locked-
+// down browser, so every touch of it is wrapped.
+const THEME_KEY = 'disklens-theme';
+function readTheme() {
+  try { return localStorage.getItem(THEME_KEY); } catch { return null; }
+}
+function setTheme(t) {
+  document.documentElement.dataset.theme = t;
+  try { localStorage.setItem(THEME_KEY, t); } catch {}
+  $('themeBtn').innerHTML = icon(t === 'light' ? 'i-moon' : 'i-sun', { s: 16 });
+  $('themeBtn').setAttribute('aria-label', t === 'light' ? 'Switch to the dark theme' : 'Switch to the ivory theme');
+  if (S.view === 'map' && !S.scanning) drawMap(S.rows);
+}
+setTheme(readTheme() || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'));
+$('themeBtn').onclick = () =>
+  setTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light');
+
+/* -------------------------------------------------------------- boot --- */
+legend();
+loadDrives();
+readHash();
+syncTabs();
+$('aside').innerHTML = idleAside();
+render();        // the hero says what is happening before the first poll lands
+poll();
+
+addEventListener('popstate', () => { readHash(); syncTabs(); render(); });
+addEventListener('resize', () => { if (S.view === 'map' && !S.scanning) drawMap(S.rows); });
+addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    if (!$('driveList').hidden) return closeDriveMenu();
+    if (scrim.dataset.on === '1') return closeSheet();
+  }
+  if (e.target.matches('input, textarea')) return;
+  if ((e.key === 'Backspace' || (e.key === 'ArrowUp' && e.altKey)) && (S.view === 'map' || S.view === 'table')) {
+    e.preventDefault(); up();
+  }
+  if (e.key === 'r' && !e.ctrlKey && !e.metaKey) $('rescan').click();
+  const n = '12345'.indexOf(e.key);
+  if (n >= 0) setView(['map', 'table', 'hot', 'clean', 'dupes'][n]);
+});
+</script>
+</body>
+</html>

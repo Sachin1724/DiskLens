@@ -1,0 +1,8 @@
+# build intermediates - the shipped installer itself is committed
+installer/out/DiskLens.exe
+installer/out/*.pdb
+installer/out/disklens.ico
+
+# local scratch
+*.log
+.shots/
