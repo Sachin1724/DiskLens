@@ -1,17 +1,33 @@
 # DiskLens
 
-A small local disk analyser and cleaner for Windows. Double-click
-`..\DISK_LENS.bat`, or run:
+A small local disk analyser and cleaner for Windows and macOS. A real desktop
+app: one window, no server, no browser tab. The page in `ui.html` runs inside
+the OS webview (WebView2 on Windows, WKWebView on macOS) and talks to the C#
+scanner over the webview's message channel.
 
 ```powershell
-pwsh -File DiskLens\server.ps1              # scan C: and open the UI
-pwsh -File DiskLens\server.ps1 -Drive D:    # another drive
-pwsh -File DiskLens\server.ps1 -Port 9000 -NoBrowser
+winget install Microsoft.DotNet.SDK.8          # once (macOS: brew install dotnet-sdk)
+dotnet publish app -c Release -r win-x64       # -> app/bin/Release/net8.0/win-x64/publish/DiskLens.exe
+dotnet publish app -c Release -r osx-arm64     # -> .../osx-arm64/publish/DiskLens
+dotnet run --project app -- --selftest         # verdicts, deny list, walk, rollup, dupes, routes
+pwsh -File installer/build.ps1                 # Windows: DiskLens-Setup.exe with the app embedded
 ```
 
-Requires PowerShell 7 (`winget install Microsoft.PowerShell`). No other
-dependencies, nothing installed, nothing leaves the machine — the UI is served
-on `127.0.0.1` by the same script that does the scanning.
+`DiskLens.exe --drive D:` (or `DiskLens --drive /Volumes/Ext`) starts on another
+volume. Nothing leaves the machine. Deletions go to the Recycle Bin on Windows
+and the Finder Trash on macOS, never a hard delete.
+
+## Updates
+
+On launch the app asks GitHub for the latest release of this repo, once, quietly.
+If its tag is newer than the running version, a banner offers **Update now**:
+the app downloads that release's `DiskLens-Setup.exe`, the installer waits for
+the app to close, swaps the files and reopens it. Offline or rate-limited is
+fine, nothing happens. Only an asset from this repo's own releases is ever run.
+
+To ship a version: `pwsh -File release.ps1 -Version 2.2.0 -Notes "what changed"`.
+That bumps the version in the csproj, installer and mac bundle, builds, commits,
+tags, pushes and publishes the release with the installer attached.
 
 ## How it works
 
@@ -85,7 +101,7 @@ model, untouched 1.7 years"* — so it can be argued with rather than trusted.
 Nothing is ever deleted on the strength of it: the Clean view simply sorts
 drops first and offers **Select the N marked drop**, and everything still goes
 to the Recycle Bin. The rules live in `advice()` in `ui.html` and are pinned by
-tests in `check-ui.js`.
+tests in `check-ui.js`; the verdicts and deny list live in `app/Api.cs`.
 
 Selection: tick rows one at a time, **shift-click** a tick to take a range,
 or use *Select the N marked drop* / *Select every unprotected row* / *Clear*.
@@ -172,7 +188,7 @@ the UI asks:
 ## Checks
 
 ```powershell
-pwsh -File DiskLens\server.ps1 -SelfTest   # verdicts, deny list, walk, rollup
-node DiskLens\check.js                     # treemap layout
-node DiskLens\check-ui.js                  # contrast and accessibility contract
+dotnet run --project DiskLens/app -- --selftest   # verdicts, deny list, walk, rollup, dupes, routes
+node DiskLens/check.js                            # treemap layout
+node DiskLens/check-ui.js                         # contrast and accessibility contract
 ```

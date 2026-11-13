@@ -42,7 +42,7 @@ const themes = {
 let worst = Infinity, worstName = '';
 for (const [theme, { fills, tones }] of Object.entries(themes)) {
   const names = Object.keys(fills);
-  assert.strictEqual(names.length, 7, `${theme}: all seven verdict fills, found ${names.length}`);
+  assert.strictEqual(names.length, 8, `${theme}: all eight verdict fills, found ${names.length}`);
   for (const n of names) {
     assert.ok(tones[n], `${theme}/${n} has no --vt- text colour`);
     const r = contrast(fills[n], tones[n]);
@@ -86,7 +86,8 @@ assert.ok(!/[\u{1F300}-\u{1FAFF}\u{2700}-\u{27BF}]/u.test(html), 'no emoji stand
 const helpers = html.slice(html.indexOf('function age('), html.indexOf('function filesHTML'));
 const { age, extOf } = new Function(helpers + '; return { age, extOf };')();
 const day = 86400000;
-const ago = ms => new Date(Date.now() - ms).toISOString().slice(0, 10);
+const localDay = t => { const d = new Date(t); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+const ago = ms => localDay(Date.now() - ms);   // local date: the page reads it as local noon
 
 assert.strictEqual(age(ago(0)).text, 'today');
 assert.strictEqual(age(ago(5 * day)).text, '5d old');
@@ -107,10 +108,10 @@ const adviceSrc = html.slice(html.indexOf('const DAY = 86400000;'), html.indexOf
 const { advice } = new Function(
   'const VERDICT = ' + JSON.stringify({
     CACHE: 'rebuilds itself', MODELS: 're-downloadable', HEAVY: 'prune in its own tool',
-    DATA: 'your files', SYSTEM: 'Windows needs it', UNKNOWN: 'unclassified', FILES: 'loose files'
+    DATA: 'your files', SYSTEM: 'the OS needs it', UNKNOWN: 'unclassified', FILES: 'loose files', BACKUP: 'a backup'
   }) + '; const key = v => VERDICT[v] ? v : "UNKNOWN";' + adviceSrc + '; return { advice };')();
 
-const daysAgo = d => new Date(Date.now() - d * 86400000).toISOString().slice(0, 10);
+const daysAgo = d => localDay(Date.now() - d * 86400000);
 const GB = 1 << 30;
 const call = (verdict, days, size = GB, removable = true) =>
   advice({ verdict, size, removable, fresh: days === null ? null : daysAgo(days) }).tag;
@@ -129,5 +130,16 @@ assert.strictEqual(call('UNKNOWN', null), 'REVIEW', 'no date means no opinion');
 assert.strictEqual(call('CACHE', null), 'REVIEW', 'an unread cache is not assumed dead');
 assert.ok(/untouched 2 months/.test(advice({ verdict: 'CACHE', size: GB, removable: true, fresh: daysAgo(60) }).why),
   'the reason names the evidence');
+// Project-aware: node_modules is as alive as the repo around it.
+assert.strictEqual(advice({ verdict: 'CACHE', size: GB, removable: true, fresh: daysAgo(200), projectFresh: daysAgo(2) }).tag, 'REVIEW',
+  'an old cache in a live project stays');
+assert.strictEqual(advice({ verdict: 'CACHE', size: GB, removable: true, fresh: daysAgo(5), projectFresh: daysAgo(400) }).tag, 'REVIEW',
+  'the fresher of the two wins, so a cache written this week is in use');
+assert.ok(/project untouched/.test(advice({ verdict: 'CACHE', size: GB, removable: true, fresh: daysAgo(200), projectFresh: daysAgo(120) }).why),
+  'a dead project is named as the reason');
+assert.strictEqual(call('BACKUP', 30), 'REVIEW', 'a recent backup is kept');
+assert.strictEqual(call('BACKUP', 400), 'DROP', 'a backup over a year old is dead weight');
+assert.strictEqual(advice({ verdict: 'FILES', kind: 'installer', size: GB, removable: true, fresh: daysAgo(45) }).tag, 'DROP', 'an old installer is a drop');
+assert.strictEqual(advice({ verdict: 'FILES', kind: 'media', size: GB, removable: true, fresh: daysAgo(45) }).tag, 'REVIEW', 'a video is not');
 
 console.log(`ui checks OK  worst pair ${worstName} ${worst.toFixed(2)}:1`);

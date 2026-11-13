@@ -1,7 +1,7 @@
 <#
-Builds DiskLens.exe (the launcher) and DiskLens-Setup.exe (the installer with
-the whole app embedded). Uses the C# compiler that ships with .NET Framework,
-so there is nothing to install.
+Builds DiskLens.exe (dotnet publish of app/) and DiskLens-Setup.exe (the
+installer with the app embedded). The installer itself is compiled with the C#
+compiler that ships with .NET Framework; the app needs the .NET 8 SDK.
 
     pwsh -File installer\build.ps1
 #>
@@ -73,19 +73,20 @@ if (-not $SkipIcon -or -not (Test-Path $ico)) {
   Write-Host "  icon    $ico" -ForegroundColor DarkGray
 }
 
-# ------------------------------------------------------------- the launcher ---
+# ------------------------------------------------------------------ the app ---
+# One self-contained exe: scanner, rules and the native window hosting ui.html.
+if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) { throw 'dotnet SDK 8 not found - winget install Microsoft.DotNet.SDK.8' }
+$proj = Join-Path $app 'app\DiskLens.csproj'
+$pub  = Join-Path $app 'app\bin\Release\net8.0\win-x64\publish'
+& dotnet publish $proj -c Release -r win-x64 --nologo -v quiet | Out-Null
+if ($LASTEXITCODE) { throw 'dotnet publish failed' }
 $launcher = Join-Path $out 'DiskLens.exe'
-& $csc /nologo /target:winexe /optimize+ /warn:1 `
-  /out:$launcher /win32icon:$ico `
-  /reference:System.dll /reference:System.Windows.Forms.dll `
-  (Join-Path $here 'Launcher.cs') | Out-Null
-if ($LASTEXITCODE) { throw 'launcher build failed' }
-Write-Host "  launcher $launcher" -ForegroundColor DarkGray
+Copy-Item (Join-Path $pub 'DiskLens.exe') $launcher -Force
+Write-Host "  app      $launcher" -ForegroundColor DarkGray
 
 # ------------------------------------------------------------- the installer --
 # Everything the app needs rides inside the setup as an embedded resource.
 $payload = @(
-  (Join-Path $app 'server.ps1'),
   (Join-Path $app 'ui.html'),
   (Join-Path $app 'index.html'),
   (Join-Path $app 'README.md'),

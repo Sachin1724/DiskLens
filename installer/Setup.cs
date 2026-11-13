@@ -16,7 +16,7 @@ using Microsoft.Win32;
 
 static class Setup {
     const string Name = "DiskLens";
-    const string Version = "1.0.0";
+    const string Version = "2.1.0";   // keep equal to <Version> in app/DiskLens.csproj
     const string Publisher = "DiskLens";
     const string RegKey = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\DiskLens";
 
@@ -30,7 +30,7 @@ static class Setup {
 
     // Every payload file is an embedded resource named payload.<file>.
     static readonly string[] Payload = {
-        "server.ps1", "ui.html", "index.html", "README.md", "DiskLens.exe", "disklens.ico"
+        "ui.html", "index.html", "README.md", "DiskLens.exe", "disklens.ico"
     };
 
     static void Write(string resource, string path) {
@@ -69,8 +69,18 @@ static class Setup {
         }
     }
 
+    // The running app holds DiskLens.exe open; give it a moment to exit, then end it.
+    static void StopApp() {
+        foreach (var proc in Process.GetProcessesByName("DiskLens")) {
+            try { if (!proc.WaitForExit(8000)) proc.Kill(); } catch { }
+        }
+    }
+
     public static void Install(bool desktopShortcut) {
+        StopApp();
         Directory.CreateDirectory(Target);
+        foreach (var old in new[] { "server.ps1", "landing.html" })        // gone since 2.0
+            try { File.Delete(Path.Combine(Target, old)); } catch { }
         foreach (var f in Payload) Write(f, Path.Combine(Target, f));
 
         var exe = Path.Combine(Target, "DiskLens.exe");
@@ -101,11 +111,7 @@ static class Setup {
             try { if (File.Exists(p)) File.Delete(p); } catch { }
 
         // Stop a running copy before pulling the files out from under it.
-        foreach (var proc in Process.GetProcessesByName("pwsh")) {
-            try {
-                if (proc.MainModule != null) { }
-            } catch { }
-        }
+        StopApp();
         try {
             foreach (var f in Directory.GetFiles(Target)) {
                 if (f.EndsWith("uninstall.exe", StringComparison.OrdinalIgnoreCase)) continue;
@@ -241,6 +247,9 @@ static class Setup {
 
             if (silent) {
                 Install(true);
+                // An in-app update asks for /relaunch so the user lands back in the new version.
+                if (arg.Contains("/relaunch"))
+                    try { Process.Start(new ProcessStartInfo(Path.Combine(Target, "DiskLens.exe")) { UseShellExecute = true }); } catch { }
                 return 0;
             }
 

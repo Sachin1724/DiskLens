@@ -6,3 +6,10 @@ installer/out/disklens.ico
 # local scratch
 *.log
 .shots/
+
+# .NET build output
+app/bin/
+app/obj/
+
+# the 65 MB installer ships as a GitHub release asset, not in git
+installer/out/*.exe

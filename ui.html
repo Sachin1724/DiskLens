@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>DiskLens</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 256 256%27%3E%3Crect width=%27256%27 height=%27256%27 rx=%2744%27 fill=%27%2307070A%27/%3E%3Crect x=%2730%27 y=%2730%27 width=%27110%27 height=%27122%27 fill=%27%23C6F135%27/%3E%3Crect x=%27152%27 y=%2730%27 width=%2774%27 height=%27122%27 fill=%27%236B4BFF%27/%3E%3Crect x=%2730%27 y=%27164%27 width=%27196%27 height=%2762%27 fill=%27%2316D9CF%27/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" onerror="this.remove()"
@@ -37,6 +38,7 @@
     --v-SYSTEM: #ff4fd8;  --vt-SYSTEM: #07070a;
     --v-UNKNOWN: #2f2f3d; --vt-UNKNOWN: #ffffff;
     --v-FILES: #16d9cf;   --vt-FILES: #07070a;
+    --v-BACKUP: #ff8a5b;  --vt-BACKUP: #07070a;
 
     --ease: cubic-bezier(.32,.72,0,1);
   }
@@ -62,6 +64,7 @@
     --v-CACHE: #a8cf00;   --vt-CACHE: #07070a;
     --v-DATA: #a8a090;    --vt-DATA: #15130d;
     --v-UNKNOWN: #9397a8; --vt-UNKNOWN: #0d0f16;
+    --v-BACKUP: #e8683a;  --vt-BACKUP: #07070a;
   }
   :root[data-theme="light"] .card,
   :root[data-theme="light"] .row,
@@ -252,6 +255,28 @@
   .keys kbd { font: inherit; padding: 3px 6px; border-radius: 6px;
     background: var(--panel-2); color: var(--text-2); }
   @media (max-width: 1320px) { .keys { display: none; } }
+  @media (max-width: 1480px) { .seg button span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); } .seg button { padding: 9px 11px; } }
+  .sysrow { display: grid; grid-template-columns: 1fr 104px; gap: var(--s3); align-items: start;
+    padding: var(--s3); border-radius: 14px; background: var(--panel-2); margin-bottom: var(--s2); }
+  .sysrow .nm { font-size: .9375rem; font-weight: 700; }
+  .sysrow .hint { font-size: .75rem; color: var(--text-2); margin-top: 4px; }
+  .sysrow .cmd { display: flex; gap: var(--s2); align-items: center; margin-top: var(--s2); flex-wrap: wrap; }
+  .sysrow code { font-family: ui-monospace, Consolas, monospace; font-size: .75rem; background: var(--panel);
+    padding: 6px 9px; border-radius: 8px; word-break: break-all; }
+  .sysrow .sz { font-size: 1.25rem; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+  .approw { display: grid; grid-template-columns: minmax(0,1fr) 90px 120px 110px; gap: var(--s3); align-items: center;
+    padding: var(--s2) var(--s3); border-radius: 12px; background: var(--panel-2); margin-bottom: 6px; }
+  .approw .nm { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .approw .pub { font-size: .6875rem; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .approw .meta { font-size: .6875rem; color: var(--text-2); font-variant-numeric: tabular-nums; }
+  .approw .stale { color: var(--v-MODELS); font-weight: 700; }
+  .chips { display: flex; gap: var(--s1); flex-wrap: wrap; padding: 0 var(--s1) var(--s3); }
+  .chips button { font-size: .6875rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+    padding: 7px 11px; border-radius: 9px; background: var(--panel-2); color: var(--text-2); }
+  .chips button[aria-pressed="true"] { background: var(--text); color: var(--ink); }
+  .warnbar { background: var(--bad); color: #fff; border-radius: 12px; padding: 10px 14px; font-size: .8125rem;
+    font-weight: 700; margin: 0 0 var(--s2); }
+  @media (max-width: 760px) { .approw { grid-template-columns: 1fr 90px; } .approw .meta { display: none; } }
 
   #map { position: relative; flex: 1; margin: var(--s3); min-height: 0; }
   .scroll { flex: 1; overflow: auto; padding: var(--s3); min-height: 0; }
@@ -484,10 +509,13 @@
   <g id="i-sun"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.5 1.5M17.6 17.6l1.5 1.5M19.1 4.9l-1.5 1.5M6.4 17.6l-1.5 1.5"/></g>
   <g id="i-moon"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></g>
   <g id="i-arrow"><path d="M6 18L18 6M9 6h9v9"/></g>
+  <g id="i-file"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zM14 3v5h5"/></g>
+  <g id="i-apps"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><path d="M17.5 14v7M14 17.5h7"/></g>
+  <g id="i-cog"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></g>
 </defs></svg>
 
 <header>
-  <div class="word"><b>DiskLens</b><span>disk atlas</span></div>
+  <div class="word"><b>DiskLens</b><span id="ver">disk atlas</span></div>
   <div class="drive">
     <span class="lbl">drive</span>
     <div class="menu">
@@ -507,6 +535,9 @@
     <button role="tab" data-view="hot" aria-selected="false"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true"><use href="#i-fire"/></svg><span>Hotspots</span></button>
     <button role="tab" data-view="clean" aria-selected="false"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true"><use href="#i-broom"/></svg><span>Clean</span></button>
     <button role="tab" data-view="dupes" aria-selected="false"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true"><use href="#i-copy"/></svg><span>Copies</span></button>
+    <button role="tab" data-view="files" aria-selected="false"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true"><use href="#i-file"/></svg><span>Files</span></button>
+    <button role="tab" data-view="apps" aria-selected="false"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true"><use href="#i-apps"/></svg><span>Apps</span></button>
+    <button role="tab" data-view="system" aria-selected="false"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true"><use href="#i-cog"/></svg><span>System</span></button>
   </div>
 
   <button class="btn ghost ico" id="themeBtn" aria-label="Switch theme" title="Switch between ivory and dark"></button>
@@ -540,7 +571,7 @@
         <div class="right">
           <span class="lbl" id="heroHint">double-click a block to go deeper</span>
           <span class="keys">
-            <kbd>1</kbd><kbd>5</kbd> views <kbd>&#9003;</kbd> up <kbd>space</kbd> select <kbd>r</kbd> rescan
+            <kbd>1</kbd><kbd>8</kbd> views <kbd>&#9003;</kbd> up <kbd>space</kbd> select <kbd>r</kbd> rescan
           </span>
         </div>
       </div>
@@ -597,9 +628,10 @@ const VERDICT = {
   MODELS:  're-downloadable',
   HEAVY:   'prune in its own tool',
   DATA:    'your files',
-  SYSTEM:  'Windows needs it',
+  SYSTEM:  'the OS needs it',
   UNKNOWN: 'unclassified',
-  FILES:   'loose files'
+  FILES:   'loose files',
+  BACKUP:  'a backup'
 };
 const MAX_TILES = 60;        // past ~200 DOM nodes a treemap stops being readable
 const MIN_SHARE = 0.004;     // a tile under 0.4% of the frame is smaller than its own padding
@@ -623,31 +655,55 @@ const split = b => {               // big number + small unit, for the stat bloc
   return i < 0 ? [s, ''] : [s.slice(0, i), s.slice(i + 1)];
 };
 
+// The page runs inside the app's webview; every request is a message to the
+// host and the answer comes back on the same channel with the same id. The
+// fetch fallback keeps `node check-ui.js`-style previews in a plain browser alive.
+const pending = new Map();
+let nextId = 1;
+if (window.external && window.external.receiveMessage) {
+  window.external.receiveMessage(raw => {
+    let m; try { m = JSON.parse(raw); } catch { return; }
+    const p = pending.get(m.id); if (!p) return;
+    pending.delete(m.id);
+    m.data && m.data.error ? p.reject(new Error(m.data.error)) : p.resolve(m.data);
+  });
+}
 async function api(p, o) {
-  const r = await fetch(p, o);
-  if (!r.ok) throw new Error('server said ' + r.status);
-  return r.json();
+  if (!(window.external && window.external.sendMessage)) {
+    const r = await fetch(p, o);
+    if (!r.ok) throw new Error('server said ' + r.status);
+    return r.json();
+  }
+  return new Promise((resolve, reject) => {
+    const id = nextId++;
+    pending.set(id, { resolve, reject });
+    setTimeout(() => { if (pending.delete(id)) reject(new Error('no answer from DiskLens')); }, 120000);
+    window.external.sendMessage(JSON.stringify({ id, path: p, body: o && o.body ? String(o.body) : null }));
+  });
 }
 
 const S = {
   view: 'map', root: '', cwd: '', rows: [],
   sort: { key: 'size', dir: -1 },
   sel: new Map(), focus: null, scanning: true, reclaim: null,
-  drive: '', drives: [], dupes: null, dupeMin: 10, lastTick: null
+  drive: '', drives: [], dupes: null, dupeMin: 10, lastTick: null,
+  files: null, fileMin: 200, fileFilter: 'all', apps: null, warned: false
 };
 const $ = id => document.getElementById(id);
+const VIEWS = ['map', 'table', 'hot', 'clean', 'dupes', 'files', 'apps', 'system'];
 const big = (v, unit) => `${esc(v)}<span style="font-size:.42em;letter-spacing:0;margin-left:.15em">${esc(unit)}</span>`;
 
 /* ------------------------------------------------------- deep linking --- */
 function writeHash(push) {
   const h = `#view=${S.view}` + (S.view === 'map' || S.view === 'table' ? `&path=${encodeURIComponent(S.cwd)}` : '');
   if (location.hash === h) return;
-  if (push) history.pushState(null, '', h); else history.replaceState(null, '', h);
+  try { if (push) history.pushState(null, '', h); else history.replaceState(null, '', h); }
+  catch { location.hash = h; }   // a file:// origin may refuse pushState
 }
 function readHash() {
   const p = new URLSearchParams(location.hash.slice(1));
   const v = p.get('view');
-  if (v && ['map', 'table', 'hot', 'clean', 'dupes'].includes(v)) S.view = v;
+  if (v && VIEWS.includes(v)) S.view = v;
   const path = p.get('path');
   if (path) S.cwd = path;
 }
@@ -662,6 +718,10 @@ function paintMeter(st) {
   $('statFree').innerHTML = big(...split(st.free));
   $('statUsed').innerHTML = big(...split(st.used));
   $('capR').textContent = `${(st.used / total * 100).toFixed(0)}% of the drive`;
+  if (st.free / total < 0.1 && !S.warned && st.used > 0) {
+    S.warned = true;
+    toast(`Only ${fmt(st.free)} free on ${st.drive} (${(st.free / total * 100).toFixed(0)}%) — start with Clean or Files`, 'bad', 9000);
+  }
   if (st.drive !== S.drive) { S.drive = st.drive; loadDrives(); }
   $('sub').textContent = st.drive;
 }
@@ -681,7 +741,7 @@ function since(iso) {
 async function poll() {
   let st;
   try { st = await api('/api/status'); }
-  catch { toast('Lost the DiskLens server — is its window still open?', 'bad', 8000); return; }
+  catch { toast('DiskLens stopped answering — restart the app', 'bad', 8000); return; }
 
   paintMeter(st);
   S.hasIndex = !!st.hasIndex;
@@ -706,7 +766,7 @@ async function poll() {
 async function loadDrives() {
   let r;
   try { r = await api('/api/drives'); } catch { return; }
-  S.drives = r.rows.filter(d => /^[A-Za-z]:$/.test(d.name));
+  S.drives = r.rows.filter(d => /^[A-Za-z]:$/.test(d.name) || d.name.startsWith('/'));
   $('driveList').innerHTML = S.drives.map(d => `
     <li><button role="option" data-drive="${esc(d.name)}" aria-selected="${d.name === S.drive}">
       <b>${esc(d.name)}</b><span>${fmt(d.free)} free of ${fmt(d.free + d.used)}</span>
@@ -729,7 +789,7 @@ async function switchDrive(d) {
   if (d === S.drive) return;
   try { await api('/api/rescan?drive=' + encodeURIComponent(d)); }
   catch { toast('Could not switch drive', 'bad'); return; }
-  S.drive = d; S.cwd = ''; S.root = ''; S.rows = []; S.dupes = null; S.reclaim = null;
+  S.drive = d; S.cwd = ''; S.root = ''; S.rows = []; S.dupes = null; S.reclaim = null; S.files = null;
   S.sel.clear(); paintSel();
   $('reclaimN').textContent = '-';
   $('reclaimGo').textContent = 'Indexing ' + d;
@@ -743,7 +803,7 @@ async function switchDrive(d) {
 async function loadReclaim() {
   try {
     const r = await api('/api/hotspots?min=50');
-    S.reclaim = r.rows.filter(x => (x.verdict === 'CACHE' || x.verdict === 'MODELS') && x.removable);
+    S.reclaim = r.rows.filter(x => (x.verdict === 'CACHE' || x.verdict === 'MODELS' || x.verdict === 'BACKUP') && x.removable);
     const sum = S.reclaim.reduce((s, x) => s + x.size, 0);
     $('reclaimN').innerHTML = big(...split(sum));
     $('reclaimGo').textContent = S.reclaim.length ? `Clean ${S.reclaim.length} folders` : 'Nothing to clean';
@@ -915,7 +975,12 @@ function drawCards(rows, kind) {
   const drops = rows.filter(r => r.removable && advice(r).tag === 'DROP');
   const dropSum = drops.reduce((a, r) => a + r.size, 0);
   const max = rows.reduce((m, r) => Math.max(m, r.size), 0) || 1;
-  host.innerHTML = `
+  const total = rows.reduce((a, r) => a + r.size, 0);
+  const dev = rows.filter(r => /node_modules|\.venv|target|DerivedData|__pycache__|\.gradle|\.nuget|\.m2|\.cargo/.test(r.path));
+  const summary = kind === 'clean'
+    ? `<p class="lbl" style="color:var(--v-FILES);padding:0 var(--s1) var(--s3)">${rows.length} folders · ${fmt(total)}` +
+      (dev.length ? ` · ${dev.length} dev caches holding ${fmt(dev.reduce((a, r) => a + r.size, 0))}` : '') + `</p>` : '';
+  host.innerHTML = summary + `
     <div class="actbar">
       ${drops.length ? `<button class="btn lime" data-pick="drops">Select the ${drops.length} marked drop · ${fmt(dropSum)}</button>` : ''}
       <button class="btn ghost" data-pick="all">Select every unprotected row</button>
@@ -933,21 +998,148 @@ function drawCards(rows, kind) {
         <div class="track"><i style="width:${(r.size / max * 100).toFixed(1)}%"></i></div>
       </button>
       <div class="sz">${fmt(r.size)}</div>
-      <button class="dig" data-act="open" aria-label="Open ${esc(r.name)} in the map">${icon('i-down')}</button>
+      ${r.dir ? `<button class="dig" data-act="open" aria-label="Open ${esc(r.name)} in the map">${icon('i-down')}</button>` : `<button class="dig" data-act="reveal" aria-label="Show ${esc(r.name)} in the file manager">${icon('i-ext', { s: 14 })}</button>`}
     </div>`).join('');
   host.querySelectorAll('[data-pick]').forEach(b => b.onclick = () => {
     const what = b.dataset.pick;
     if (what === 'none') S.sel.clear();
     else for (const r of (what === 'drops' ? drops : rows.filter(x => x.removable))) S.sel.set(r.path, r.size);
     paintSel();
-    drawCards(rows, kind);
+    kind === 'files' ? drawFiles(S.files) : drawCards(rows, kind);
   });
   wireRows(host, rows, '.row');
 }
 
+/* ------------------------------------------------------------- files --- */
+async function startFiles() {
+  try { await api('/api/files/start?min=' + S.fileMin); }
+  catch { toast('Could not start the file scan', 'bad'); return; }
+  S.files = { running: true, rows: [], seen: 0 };
+  render(); pollFiles();
+}
+async function pollFiles() {
+  let d;
+  try { d = await api('/api/files'); } catch { return; }
+  S.files = d;
+  if (S.view === 'files') drawFiles(d);
+  if (d.running) setTimeout(pollFiles, 500);
+}
+const FILTERS = {
+  all: ['Everything', () => true],
+  old: ['Untouched 1y+', r => age(r.fresh).stale],
+  installer: ['Installers', r => r.kind === 'installer'],
+  media: ['Video & audio', r => r.kind === 'media'],
+  archive: ['Archives & disk images', r => r.kind === 'archive' || r.kind === 'disk image']
+};
+function drawFiles(d) {
+  const host = $('scroll');
+  const bar = `
+    <div class="dupebar">
+      <button class="btn lime" data-f="scan">${icon('i-file')}${d && d.rows && d.rows.length ? 'Scan again' : 'Find big files'}</button>
+      <select data-f="min" aria-label="smallest file to list">
+        ${[50, 200, 500, 1000].map(m => `<option value="${m}" ${m === S.fileMin ? 'selected' : ''}>from ${m} MB</option>`).join('')}
+      </select>
+      <span class="lbl" style="color:var(--text-3)">${esc(S.drive || '')} · the 300 biggest files</span>
+    </div>`;
+  const wire = () => host.querySelectorAll('[data-f]').forEach(el => {
+    if (el.dataset.f === 'min') { el.onchange = e => { S.fileMin = +e.target.value; }; return; }
+    if (el.dataset.f === 'scan') el.onclick = startFiles;
+    if (el.dataset.f === 'filter') el.onclick = () => { S.fileFilter = el.dataset.k; drawFiles(S.files); };
+  });
+  if (!d || (!d.running && !d.done)) {
+    host.innerHTML = bar + emptyHTML('Find the biggest files', 'One pass over the drive keeps the 300 largest files with the date each was last written. A 40 GB ISO from 2021 shows up here, not in a folder total.', '');
+    wire(); wireEmpty(host); return;
+  }
+  if (d.running) {
+    host.innerHTML = bar + `<div class="empty"><strong>Reading…</strong><p>${(d.seen || 0).toLocaleString()} files seen<br>
+      <span style="font-size:.6875rem;color:var(--text-3)">${esc((d.current || '').slice(0, 70))}</span></p></div>`;
+    wire(); return;
+  }
+  const chips = `<div class="chips">${Object.entries(FILTERS).map(([k, [label, fn]]) => {
+    const n = d.rows.filter(fn).length;
+    return `<button data-f="filter" data-k="${k}" aria-pressed="${S.fileFilter === k}">${label} · ${n}</button>`;
+  }).join('')}</div>`;
+  const rows = d.rows.filter(FILTERS[S.fileFilter][1]);
+  if (!rows.length) {
+    host.innerHTML = bar + chips + emptyHTML('Nothing in this group', 'Try another filter or a smaller size threshold.', '');
+    wire(); wireEmpty(host); return;
+  }
+  drawCards(rows, 'files');                       // same rows, ticks and calls as Clean
+  host.insertAdjacentHTML('afterbegin', bar + chips);
+  wire();
+}
+
+/* -------------------------------------------------------------- apps --- */
+async function drawApps() {
+  const host = $('scroll');
+  if (!S.apps) {
+    host.innerHTML = emptyHTML('Reading installed applications', 'From the registry on Windows, from /Applications on macOS.', '');
+    try { S.apps = (await api('/api/apps')).rows; } catch (e) { host.innerHTML = emptyHTML('Could not list applications', String(e.message || e), ''); return; }
+    if (S.view !== 'apps') return;
+  }
+  const rows = S.apps;
+  const total = rows.reduce((a, r) => a + r.size, 0);
+  const stale = rows.filter(r => r.fresh && age(r.fresh).stale);
+  if (!rows.length) { host.innerHTML = emptyHTML('No applications found', 'Nothing registered an uninstaller on this machine.', ''); return; }
+  host.innerHTML = `
+    <p class="lbl" style="color:var(--v-FILES);padding:0 var(--s1) var(--s3)">${rows.length} applications · ${fmt(total)}` +
+    (stale.length ? ` · ${stale.length} not updated in a year` : '') + `</p>
+    <p style="font-size:.75rem;color:var(--text-3);padding:0 var(--s1) var(--s3)">“Last written” is when the program’s folder last changed — an update, not a launch. It is the only usage signal available without an elevated process, so treat it as a hint.</p>` +
+    rows.map(r => {
+      const a = r.fresh ? age(r.fresh) : null;
+      return `<div class="approw">
+        <div><div class="nm" title="${esc(r.path || '')}">${esc(r.name)}</div><div class="pub">${esc(r.publisher || '')}</div></div>
+        <div class="meta" style="text-align:right;font-weight:700;color:var(--text)">${r.size ? fmt(r.size) : '—'}</div>
+        <div class="meta">${r.installed ? 'installed ' + esc(r.installed) : ''}<br>${a ? `<span class="${a.stale ? 'stale' : ''}">last written ${esc(a.text)}</span>` : ''}</div>
+        <button class="btn ghost" data-un="${esc(r.id)}" data-name="${esc(r.name)}">${icon('i-trash')}Uninstall</button>
+      </div>`;
+    }).join('');
+  host.querySelectorAll('[data-un]').forEach(b => b.onclick = async () => {
+    toast(`Starting the uninstaller for ${b.dataset.name}…`, 'ok', 5000);
+    try { await api('/api/apps/uninstall?id=' + encodeURIComponent(b.dataset.un)); }
+    catch (e) { toast('Could not start it — ' + (e.message || e), 'bad', 6000); return; }
+    S.apps = null;
+  });
+}
+
+/* ------------------------------------------------------------ system --- */
+async function drawSystem() {
+  const host = $('scroll');
+  host.innerHTML = emptyHTML('Measuring', 'Hibernation file, page file, old installs, update caches, VM disks, the bin.', '');
+  let sys, log;
+  try { [sys, log] = await Promise.all([api('/api/system'), api('/api/log')]); }
+  catch (e) { host.innerHTML = emptyHTML('Could not measure', String(e.message || e), ''); return; }
+  if (S.view !== 'system') return;
+  const total = sys.rows.reduce((a, r) => a + r.size, 0);
+  host.innerHTML = `
+    <p class="lbl" style="color:var(--v-FILES);padding:0 var(--s1) var(--s3)">${sys.rows.length} items · ${fmt(total)} — DiskLens never deletes these; each has its own tool</p>` +
+    sys.rows.map(r => `<div class="sysrow">
+      <div><div class="nm">${esc(r.name)}</div>
+        <div class="hint">${esc(r.hint)}<br><span style="color:var(--text-3)">${esc(r.path)}</span></div>
+        <div class="cmd">
+          ${r.cmd ? `<code>${esc(r.cmd)}</code><button class="btn ghost" data-copy="${esc(r.cmd)}">Copy</button>` : ''}
+          ${r.action === 'empty-bin' ? `<button class="btn bad" data-sys="empty-bin">${icon('i-trash')}Empty it now</button>` : ''}
+        </div></div>
+      <div class="sz">${r.size ? fmt(r.size) : '—'}</div>
+    </div>`).join('') +
+    `<p class="lbl" style="color:var(--text-3);padding:var(--s3) var(--s1) var(--s2)">Removed by DiskLens · ${fmt(log.total)} across ${log.rows.length} items</p>` +
+    (log.rows.length ? log.rows.slice(0, 60).map(l => `<div class="copy"><span class="p" style="color:var(--text-3)">${esc(l.when.slice(0, 10))}</span><span class="p">${esc(l.path)}</span><span class="meta">${fmt(l.size)}</span></div>`).join('')
+      : `<p style="font-size:.75rem;color:var(--text-3);padding:0 var(--s1)">Nothing yet. Everything removed through DiskLens is listed here with its size.</p>`);
+  host.querySelectorAll('[data-copy]').forEach(b => b.onclick = () => {
+    const t = document.createElement('textarea'); t.value = b.dataset.copy; document.body.appendChild(t); t.select();
+    try { document.execCommand('copy'); toast('Command copied'); } catch { toast('Could not copy', 'bad'); }
+    t.remove();
+  });
+  host.querySelectorAll('[data-sys]').forEach(b => b.onclick = async () => {
+    toast('Emptying…', 'ok', 20000);
+    try { await api('/api/system/empty-bin'); toast('Emptied'); } catch (e) { toast('Could not empty it — ' + (e.message || e), 'bad', 6000); }
+    drawSystem();
+  });
+}
+
 /* ------------------------------------------------------------ copies --- */
 async function startDupes() {
-  const scope = S.drive || 'C:';
+  const scope = S.drive || '/';
   try { await api(`/api/dupes/start?min=${S.dupeMin}&path=${encodeURIComponent(scope)}`); }
   catch { toast('Could not start the copy scan', 'bad'); return; }
   S.dupes = { running: true, rows: [], seen: 0, hashed: 0, wasted: 0 };
@@ -1048,6 +1240,7 @@ function wireRows(host, rows, sel) {
       if (b.dataset.act === 'tick') { S.lastTick = r.path; toggle(r); }
       if (b.dataset.act === 'pick') inspect(r);
       if (b.dataset.act === 'open') go(r.path, true);
+      if (b.dataset.act === 'reveal') api('/api/reveal?path=' + encodeURIComponent(r.path)).catch(() => {});
     });
     el.onpointerdown = e => { if (!e.target.closest('[data-act]')) inspect(r); };
   });
@@ -1145,9 +1338,22 @@ function advice(r) {
   if (!r.removable) return { tag: 'KEEP', why: 'protected — ' + VERDICT[key(r.verdict)], days };
   if (r.verdict === 'DATA') return { tag: 'KEEP', why: 'your own files · ' + when, days };
   if (r.verdict === 'HEAVY') return { tag: 'REVIEW', why: 'shrink it in its own tool · ' + when, days };
-  if (r.verdict === 'CACHE') return days !== null && days > 30
-    ? { tag: 'DROP', why: 'cache, ' + when, days }
-    : { tag: 'REVIEW', why: 'cache still in use · ' + when, days };
+  if (r.verdict === 'CACHE') {
+    // A build cache is judged by the project around it: node_modules in a repo
+    // edited yesterday is in use however old its own files are.
+    const pdays = r.projectFresh ? Math.round((Date.now() - Date.parse(r.projectFresh + 'T12:00:00')) / DAY) : null;
+    if (pdays !== null && (days === null || pdays < days))
+      return pdays > 30 ? { tag: 'DROP', why: `cache, project untouched ${pdays < 365 ? Math.round(pdays / 30) + ' months' : (pdays / 365).toFixed(1).replace(/\.0$/, '') + ' years'}`, days: pdays }
+                        : { tag: 'REVIEW', why: `cache, project edited ${pdays < 1 ? 'today' : pdays + 'd ago'}`, days: pdays };
+    return days !== null && days > 30
+      ? { tag: 'DROP', why: 'cache, ' + when, days }
+      : { tag: 'REVIEW', why: 'cache still in use · ' + when, days };
+  }
+  if (r.verdict === 'BACKUP') return days !== null && days > 365
+    ? { tag: 'DROP', why: 'old backup, ' + when, days }
+    : { tag: 'REVIEW', why: 'backup — keep unless a newer one exists · ' + when, days };
+  if (r.verdict === 'FILES' && r.kind === 'installer' && days !== null && days > 30)
+    return { tag: 'DROP', why: 'installer, ' + when, days };
   if (r.verdict === 'MODELS') return days !== null && days > 90
     ? { tag: 'DROP', why: 'unused model, ' + when, days }
     : { tag: 'REVIEW', why: 'model in use · ' + when, days };
@@ -1242,6 +1448,9 @@ function paintSel() {
 
 /* ----------------------------------------------------------- routing --- */
 const SUBTITLE = {
+  files: 'Biggest files anywhere on the drive',
+  apps: 'Installed applications',
+  system: 'System space, and the one command that shrinks each',
   hot: 'Biggest folders anywhere on the drive',
   clean: 'Caches and models that are safe to drop',
   dupes: 'The same file kept in more than one place'
@@ -1294,10 +1503,16 @@ async function render(keep) {
   $('heroHint').textContent = isMap ? 'double-click a block to go deeper'
     : S.view === 'table' ? 'sortable · keyboard friendly'
     : S.view === 'hot' ? 'where the space actually went'
-    : S.view === 'dupes' ? 'the same bytes, stored twice' : 'tick what you want gone';
+    : S.view === 'dupes' ? 'the same bytes, stored twice'
+    : S.view === 'files' ? 'the biggest single files, and how old they are'
+    : S.view === 'apps' ? 'installed programs by size — uninstall the proper way'
+    : S.view === 'system' ? 'space only the OS tools can give back' : 'tick what you want gone';
 
   // A scan from an earlier session is still on the server - pick it up.
   if (S.view === 'dupes') { if (!S.dupes) pollDupes(); drawDupes(S.dupes); return; }
+  if (S.view === 'files') { if (!S.files) pollFiles(); drawFiles(S.files); return; }
+  if (S.view === 'apps') { drawApps(); return; }
+  if (S.view === 'system') { drawSystem(); return; }
   if (!$('aside').innerHTML.trim()) $('aside').innerHTML = idleAside();
 
   if (S.scanning && !S.hasIndex && !keep) {
@@ -1314,10 +1529,10 @@ async function render(keep) {
       return;
     }
     if (!keep) {
-      const r = await api('/api/hotspots?min=' + (S.view === 'hot' ? 500 : 50));
+      const r = await api('/api/hotspots?min=' + (S.view === 'hot' ? 500 : 20));
       const rows = r.rows.map(x => ({ ...x, dir: true }));   // every hotspot is a folder
       S.rows = S.view === 'hot' ? rows
-        : rows.filter(x => (x.verdict === 'CACHE' || x.verdict === 'MODELS') && x.removable)
+        : rows.filter(x => (x.verdict === 'CACHE' || x.verdict === 'MODELS' || x.verdict === 'BACKUP') && x.removable)
               .sort((a, b) => (advice(b).tag === 'DROP') - (advice(a).tag === 'DROP') || b.size - a.size);
     }
     drawCards(S.rows, S.view);
@@ -1355,7 +1570,7 @@ function syncTabs() {
   document.querySelectorAll('[role=tab]').forEach(b =>
     b.setAttribute('aria-selected', String(b.dataset.view === S.view)));
 }
-document.querySelectorAll('[role=tab]').forEach(b => b.onclick = () => setView(b.dataset.view));
+document.querySelectorAll('[role=tab]').forEach((b, i) => { b.onclick = () => setView(b.dataset.view); b.title = `${b.textContent.trim()} (${i + 1})`; });
 $('reclaimGo').onclick = $('reclaimChip').onclick = () => setView('clean');
 
 $('rescan').onclick = async () => {
@@ -1400,6 +1615,10 @@ $('shYes').onclick = async () => {
         (r.refused.length ? ` · ${r.refused.length} refused` : ''), r.refused.length ? 'bad' : 'ok', 5000);
   // The server already patched the index for what it removed - no rescan.
   $('aside').innerHTML = idleAside();
+  if (S.files && S.files.rows) {
+    const gone = new Set(r.removed);
+    S.files.rows = S.files.rows.filter(f => !gone.has(f.path));
+  }
   if (S.dupes && S.dupes.rows) {
     const gone = new Set(r.removed);
     S.dupes.rows = S.dupes.rows
@@ -1437,6 +1656,25 @@ setTheme(readTheme() || (matchMedia('(prefers-color-scheme: light)').matches ? '
 $('themeBtn').onclick = () =>
   setTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light');
 
+/* ------------------------------------------------------------ updates --- */
+// One quiet check per launch. A newer GitHub release shows a banner; the
+// button downloads that release's installer, which swaps the files and reopens.
+async function checkUpdate() {
+  let u;
+  try { u = await api('/api/update'); } catch { return; }
+  $('ver').textContent = 'v' + u.current;
+  if (!u.newer || !u.url) return;
+  const t = $('toast');
+  t.innerHTML = `<span>DiskLens ${esc(u.latest)} is out (you have ${esc(u.current)})</span> <button class="btn lime" id="updGo" style="margin-left:12px">Update now</button>`;
+  t.dataset.kind = 'ok'; t.dataset.on = '1';
+  clearTimeout(toastT);
+  $('updGo').onclick = async () => {
+    $('updGo').disabled = true; $('updGo').textContent = 'Downloading…';
+    try { await api('/api/update/install?url=' + encodeURIComponent(u.url)); }
+    catch (e) { toast('Update failed — ' + (e.message || e), 'bad', 7000); }
+  };
+}
+
 /* -------------------------------------------------------------- boot --- */
 legend();
 loadDrives();
@@ -1445,6 +1683,7 @@ syncTabs();
 $('aside').innerHTML = idleAside();
 render();        // the hero says what is happening before the first poll lands
 poll();
+checkUpdate();
 
 addEventListener('popstate', () => { readHash(); syncTabs(); render(); });
 addEventListener('resize', () => { if (S.view === 'map' && !S.scanning) drawMap(S.rows); });
@@ -1458,8 +1697,8 @@ addEventListener('keydown', e => {
     e.preventDefault(); up();
   }
   if (e.key === 'r' && !e.ctrlKey && !e.metaKey) $('rescan').click();
-  const n = '12345'.indexOf(e.key);
-  if (n >= 0) setView(['map', 'table', 'hot', 'clean', 'dupes'][n]);
+  const n = '12345678'.indexOf(e.key);
+  if (n >= 0) setView(VIEWS[n]);
 });
 </script>
 </body>

@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    DiskLens desktop app. One self-contained executable: the scanner (Scan.cs),
+    the rules and routes (Api.cs) and a native window hosting ui.html through
+    Photino (WebView2 on Windows, WKWebView on macOS). No server, no browser.
+
+      dotnet publish -r win-x64   -c Release    # bin/Release/net8.0/win-x64/publish/DiskLens.exe
+      dotnet publish -r osx-arm64 -c Release    # bin/Release/net8.0/osx-arm64/publish/DiskLens
+      dotnet run : selftest
+  -->
+
+  <PropertyGroup>
+    <OutputType Condition="$([MSBuild]::IsOSPlatform('Windows'))">WinExe</OutputType>
+    <OutputType Condition="!$([MSBuild]::IsOSPlatform('Windows'))">Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AssemblyName>DiskLens</AssemblyName>
+    <RootNamespace>DiskLens</RootNamespace>
+    <ApplicationIcon Condition="Exists('../installer/out/disklens.ico')">../installer/out/disklens.ico</ApplicationIcon>
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <Version>2.1.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Photino.NET" Version="3.*" />
+  </ItemGroup>
+
+  <!-- The page lives at the repo root so check.js / check-ui.js keep testing it. -->
+  <ItemGroup>
+    <None Include="../ui.html" Link="wwwroot/ui.html" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="../installer/out/disklens.ico" Link="disklens.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Condition="Exists('../installer/out/disklens.ico')" />
+  </ItemGroup>
+
+</Project>
