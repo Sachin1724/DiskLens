@@ -2,9 +2,9 @@
 
 ## Brief
 
-- **Subject:** DiskLens, a local disk analyser for Windows.
+- **Subject:** DiskLens, a local disk analyser, a desktop app for Windows and macOS.
 - **Audience:** someone whose C: drive is full and who does not know why.
-- **Job:** download the installer, or run it from source.
+- **Job:** download the installer (Windows) or build it (macOS); learn it is a real app, not a browser tab, and that it updates itself.
 - **Constraints:** one self-contained HTML file, shipped inside the app and openable
   offline. No framework, no CDN at runtime (the font link degrades to system fonts).
 

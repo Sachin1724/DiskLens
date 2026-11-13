@@ -2,7 +2,7 @@
 // The concept and the system it is built to are in DESIGN.md.
 //
 //   node landing/build.mjs
-import { writeFileSync } from "node:fs";
+import { writeFileSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as k from "../../../../.claude/skills/anatomy/kit/iso-kit.mjs";
@@ -11,6 +11,8 @@ import { buildSvg, needleAt, HEAD_REACH, P, TRUTH, DIAL, DIAL_R, DIAL_Z, DIAL_H 
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const n = (value) => value.toLocaleString("en-US");
+const WINDOW_SHOT = "data:image/jpeg;base64," + readFileSync(join(HERE, "window.jpg")).toString("base64");
+const RELEASE = "https://github.com/Sachin1724/DiskLens/releases/latest/download/DiskLens-Setup.exe";
 
 // Every byte count below was measured by DiskLens on the machine it was built on.
 // GB, because that is how the app prints them.
@@ -68,12 +70,15 @@ const LEVELS = [
 ];
 
 const FEATURES = [
-  ["Map", "A squarified treemap of the folder you are in. Loose files get a block of their own, so a 36 GB pagefile stops hiding behind a folder list.", "lime", "wide"],
-  ["Copies", `Size buckets first, then only the collisions are read: 3.2M files seen, 462 hashed, ${TRUTH.dupesGb} GB of the same bytes in more than one place.`, "cyan", "tall"],
-  ["Hotspots", "The biggest folders anywhere on the drive, with pure containers filtered out so you get the culprit, not its parent.", "plain", ""],
-  ["Table", "The same numbers, sortable, keyboard-navigable. A treemap on its own is a poor experience without a mouse.", "plain", ""],
-  ["Keep, review, drop", "Each row says what it thinks and why: cache, untouched 2 months. Built from what the folder is and when anything in it was last written.", "violet", "wide"],
-  ["Recycle Bin, always", "Nothing is deleted outright. Deletes patch the index in place, so the numbers update in 0.3 s instead of another sweep.", "plain", ""],
+  ["Map", "A squarified treemap of the folder you are in. Loose files get a block of their own, so a 36 GB pagefile stops hiding behind a folder list.", "lime", "wide", "Browse"],
+  ["Clean, by project", "A node_modules is judged by the repo around it, not by itself. Cold for a month and the project dead too, it is marked drop. Edited yesterday, it stays.", "violet", "wide", "Clean"],
+  ["Copies", `Size buckets first, then only the collisions are read: 3.2M files seen, 462 hashed, ${TRUTH.dupesGb} GB of the same bytes in more than one place.`, "cyan", "tall", "Find"],
+  ["Files", "The 300 biggest single files with the date each was last written. A 40 GB ISO from 2021 shows up here, not hidden in a folder total.", "plain", "", "Find"],
+  ["Apps", "Every installed program by size, with the install date and when its folder last changed. Uninstall runs the vendor's own uninstaller.", "plain", "", "Remove"],
+  ["System", "Hibernation file, Windows.old, update cache, WSL and Docker disks, the Recycle Bin. DiskLens never deletes these; it shows the size and the one command that shrinks each.", "plain", "", "Explain"],
+  ["Hotspots", "The biggest folders anywhere on the drive, with pure containers filtered out so you get the culprit, not its parent.", "plain", "", "Find"],
+  ["Table", "The same numbers, sortable and keyboard-navigable. A treemap alone is a poor experience without a mouse.", "plain", "", "Browse"],
+  ["Recycle Bin, always", "Nothing is deleted outright, and every removal is logged with its size. Deletes patch the index in place, so numbers update in 0.3 s.", "plain", "", "Safe"],
 ];
 
 const STEPS = [
@@ -412,7 +417,7 @@ const page = `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>DiskLens - see where 705 GB went</title>
-<meta name="description" content="DiskLens reads a Windows drive once, keeps the index, and answers from memory: treemap, hotspots, duplicate files and a cleaner that says what is safe to drop, and why.">
+<meta name="description" content="DiskLens is a desktop app for Windows and macOS that reads a drive once, keeps the index, and answers from memory: treemap, big files, duplicates, apps and a cleaner that says what is safe to drop, and why.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" onerror="this.remove()"
@@ -581,6 +586,9 @@ section { padding: clamp(72px, 11vw, 150px) 0; border-top: 1px solid var(--line)
 .cell .lbl { opacity: .6; }
 .cell.lime .lbl, .cell.violet .lbl, .cell.cyan .lbl { color: inherit; }
 
+.shot { margin: 0; background: var(--panel); border-radius: 22px; padding: clamp(10px, 1.6vw, 18px); }
+.shot img { display: block; width: 100%; height: auto; border-radius: 14px; }
+.shot figcaption { margin: 14px 6px 4px; }
 .get { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .card { background: var(--panel); border-radius: 20px; padding: clamp(22px, 2.6vw, 34px); }
 .card ol { margin: 16px 0 0; padding-left: 1.1rem; color: var(--muted); font-size: .9375rem; }
@@ -621,6 +629,7 @@ footer a:hover { color: var(--ink); }
     <a class="word" href="#top"><b>DiskLens</b><span>disk atlas</span></a>
     <nav>
       <a href="#how">How it works</a>
+      <a href="#app">The app</a>
       <a href="#what">What it does</a>
       <a href="#get">Get it</a>
     </nav>
@@ -637,8 +646,8 @@ footer a:hover { color: var(--ink); }
             <p>This is a real Windows drive, drawn by the thing you are about to install.
                Every block is a folder, sized by the bytes it actually holds. Scroll to drill in.</p>
             <div class="acts">
-              <a class="btn lime" href="installer/out/DiskLens-Setup.exe" download><span>Download for Windows</span></a>
-              <a class="btn ghost" href="#get"><span>Run from source</span></a>
+              <a class="btn lime" href="${RELEASE}"><span>Download for Windows</span></a>
+              <a class="btn ghost" href="#get"><span>macOS and source</span></a>
             </div>
           </div>
         </div>
@@ -685,16 +694,32 @@ footer a:hover { color: var(--ink); }
     </div>
   </section>
 
+  <section id="app">
+    <div class="wrap">
+      <div class="head" data-reveal>
+        <h2>A window,<br>not a tab.</h2>
+        <p>DiskLens is a real desktop app: one file, its own window and icon, no server and no
+           browser. It runs on Windows and macOS, and it tells you when a newer version is out.</p>
+      </div>
+      <figure class="shot" data-reveal>
+        <img src="${WINDOW_SHOT}" width="1200" height="783" loading="lazy"
+             alt="The DiskLens window showing a treemap of drive C: with Users, Program Files, Windows and ProgramData as the largest blocks, and the tab bar for map, table, hotspots, clean, copies, files, apps and system.">
+        <figcaption class="fine">The app itself, scanning the same drive as the hero above.</figcaption>
+      </figure>
+    </div>
+  </section>
+
   <section id="what">
     <div class="wrap">
       <div class="head" data-reveal>
-        <h2>Five views<br>over one index.</h2>
-        <p>Drill the map, sort the table, jump to the hotspots, find the copies, then clear what
-           the cleaner marks. Nothing leaves the machine and nothing is deleted outright.</p>
+        <h2>Eight views<br>over one index.</h2>
+        <p>Drill the map, find the big files and the copies, check what your apps and the system
+           are holding, then clear what the cleaner marks. Nothing leaves the machine and nothing is
+           deleted outright.</p>
       </div>
       <div class="bento" data-reveal>
-        ${FEATURES.map(([title, body, tone, span], i) =>
-          `<div class="cell ${tone} ${span}"><span class="lbl">${String(i + 1).padStart(2, "0")}</span>
+        ${FEATURES.map(([title, body, tone, span, tag]) =>
+          `<div class="cell ${tone} ${span}"><span class="lbl">${tag}</span>
             <div><h3>${title}</h3><p style="margin-top:10px">${body}</p></div></div>`).join("")}
       </div>
     </div>
@@ -704,31 +729,36 @@ footer a:hover { color: var(--ink); }
     <div class="wrap">
       <div class="head" data-reveal>
         <h2>Get it.</h2>
-        <p>A per-user install, no elevation, nothing written outside your profile.</p>
+        <p>A per-user install, no elevation, nothing written outside your profile. Nothing to
+           install first.</p>
       </div>
       <div class="get" data-reveal>
         <div class="card">
-          <span class="lbl">The installer</span>
+          <span class="lbl">Windows</span>
           <ol>
-            <li>Download <code>DiskLens-Setup.exe</code> and run it. It installs for you only, into
+            <li><a href="${RELEASE}">Download <code>DiskLens-Setup.exe</code></a> (about 65 MB) and run it. It installs for you only, into
                 <code>%LOCALAPPDATA%\\Programs\\DiskLens</code>.</li>
             <li>DiskLens lands in the Start menu, and on the desktop if you leave the box ticked.</li>
+            <li>It checks for a newer release when it opens and offers <b>Update now</b>. One click, and it reopens updated.</li>
             <li>Remove it from Add/Remove Programs. The saved index stays in
                 <code>%LOCALAPPDATA%\\DiskLens</code> until you delete it.</li>
           </ol>
-          <p class="fine">Needs PowerShell 7: <code>winget install --id Microsoft.PowerShell</code>.
-             DiskLens says so if it is missing.</p>
+          <p class="fine">Needs Windows 10 or 11 with WebView2, which ships with Edge.</p>
         </div>
         <div class="card">
-          <span class="lbl">Or from source</span>
-          <pre><code>pwsh -File DiskLens\\server.ps1
+          <span class="lbl">macOS, or from source</span>
+          <pre><code># needs the .NET 8 SDK
+git clone https://github.com/Sachin1724/DiskLens
+cd DiskLens
+
+dotnet publish app -c Release -r osx-arm64
+sh app/bundle-mac.sh        # -> DiskLens.app
 
 # the checks that guard it
-pwsh -File DiskLens\\server.ps1 -SelfTest
-node DiskLens/check.js
-node DiskLens/check-ui.js</code></pre>
-          <p class="fine">A PowerShell server that walks the drive and serves 127.0.0.1, and one
-             HTML page. That is the whole program.</p>
+dotnet run --project app -- --selftest
+node check.js &amp;&amp; node check-ui.js</code></pre>
+          <p class="fine">No prebuilt Mac app is published yet, and the Mac build has not been tested on real
+             hardware. The scanner, rules and window are the same code as on Windows.</p>
         </div>
       </div>
     </div>
@@ -737,7 +767,8 @@ node DiskLens/check-ui.js</code></pre>
 
 <footer>
   <div class="wrap">
-    <span>DiskLens, a local disk analyser for Windows.</span>
+    <span>DiskLens, a local disk analyser for Windows and macOS.</span>
+    <a href="https://github.com/Sachin1724/DiskLens">Source on GitHub</a>
     <span>Every number here was measured, not estimated.</span>
     <a href="#top" style="margin-left:auto">Back to the top</a>
   </div>
