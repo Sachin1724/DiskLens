@@ -774,7 +774,11 @@ node check.js &amp;&amp; node check-ui.js</code></pre>
   </div>
 </footer>
 
-<script type="module">${live.replace(/<\/(script)/gi, "<\\/$1")}</script>
+<script type="module">${live
+  // The inlined kit carries a page-template string that mentions a script tag. Nothing that looks like a
+  // script tag, open or close, may appear inside this script, so spell both with unicode escapes: they
+  // mean the same to JS (in a string or a regex) and are invisible to any HTML parser or sanitiser.
+  .replace(/<(\\?)(\/?)script/gi, (m, bs, sl) => "<" + (sl ? "\\u002f" : "") + "\\u0073cript")}</script>
 </body>
 </html>`;
 
