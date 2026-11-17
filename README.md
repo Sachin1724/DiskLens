@@ -119,6 +119,15 @@ or use *Select the N marked drop* / *Select every unprotected row* / *Clear*.
 - **Hotspots** — the biggest folders anywhere on the drive, with containers
   whose children are already listed filtered out.
 - **Clean** — only caches and model folders that passed the deny list.
+- **Leftovers** — cold projects and what inside them regrows. Finds `node_modules`,
+  `.venv`, `.next`, `.tox`, caches, and `target`/`dist`/`build`/`bin`/`obj` (only
+  beside a real project marker such as `package.json` or a `.csproj`), 20 MB and up,
+  grouped by project. Each is judged by the source *around* it, not its own files,
+  so a build that touched `dist` yesterday does not make a dead project look alive.
+  Throwaway-named folders (`test2`, `my-app`, `untitled`, `copy of …`) are listed as
+  whole projects; the chip says whether `.git` exists, because without it the folder
+  may be the only copy. The cross-mark hides a project for good (`ignore.txt` next to
+  the index); *show again* restores them. Deletes show a running "this session" total.
 - **Copies** — the same bytes kept in more than one place. Files are bucketed by
   size first (free), and only the collisions are read, so a whole drive takes a
   minute or two: 3.2M files seen, 462 actually hashed, 157 groups, 31 GB held by
@@ -171,6 +180,24 @@ rings, SVG icons and no emoji, empty states that offer an action, motion only
 on `transform`/`opacity`, and `prefers-reduced-motion` and `prefers-contrast`
 honoured. Under 980px the rail stacks below the hero; under 620px the stat grid
 goes two-up and the selection tray spans the width.
+
+## Live index, restore, monthly nudge
+
+- **Live index (Windows, opt-in).** System view > *Live index* reads the NTFS change
+  journal every ~20 s and re-reads only the folders that changed, so a file that
+  merely grew no longer leaves the index stale. Opening the volume needs
+  administrator rights: the button restarts DiskLens elevated (one Windows prompt)
+  and it resumes by itself next time. From an admin prompt,
+  `DiskLens.exe --livetest` proves the journal feeds the index end to end.
+  If the journal wrapped while the app was closed it says so and asks for one Rescan.
+- **Restore.** Everything under *Removed by DiskLens* (System view) has a Restore
+  button that puts it back from the Recycle Bin / Trash and patches the index.
+  Only items DiskLens itself removed can be restored through it.
+- **Free space.** After a clean the toast shows the drive's free space before and
+  after, plus a running session total.
+- **Monthly nudge.** At launch, at most once every 30 days, if 5 GB or more sits in
+  cold projects' rebuildable folders a banner offers to open Leftovers. Nothing
+  runs in the background; the app has to be open to notice.
 
 ## Safety
 

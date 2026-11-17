@@ -499,6 +499,7 @@
   <g id="i-fire"><path d="M12 3c3 4 6 5.5 6 9a6 6 0 1 1-12 0c0-2 1-3.2 2.5-4.5"/></g>
   <g id="i-broom"><path d="M4 20l6-6M14 4l6 6-5 2-3-3zM9 13l2 2-4 5H4v-3z"/></g>
   <g id="i-refresh"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 5v6h-6"/></g>
+  <g id="i-hide"><path d="M6 6l12 12M18 6L6 18"/></g>
   <g id="i-check"><path d="M4 12.5l5 5L20 6.5"/></g>
   <g id="i-folder"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></g>
   <g id="i-down"><path d="M9 6l6 6-6 6"/></g>
@@ -534,6 +535,7 @@
     <button role="tab" data-view="table" aria-selected="false"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true"><use href="#i-table"/></svg><span>Table</span></button>
     <button role="tab" data-view="hot" aria-selected="false"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true"><use href="#i-fire"/></svg><span>Hotspots</span></button>
     <button role="tab" data-view="clean" aria-selected="false"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true"><use href="#i-broom"/></svg><span>Clean</span></button>
+    <button role="tab" data-view="left" aria-selected="false"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true"><use href="#i-folder"/></svg><span>Leftovers</span></button>
     <button role="tab" data-view="dupes" aria-selected="false"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true"><use href="#i-copy"/></svg><span>Copies</span></button>
     <button role="tab" data-view="files" aria-selected="false"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true"><use href="#i-file"/></svg><span>Files</span></button>
     <button role="tab" data-view="apps" aria-selected="false"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true"><use href="#i-apps"/></svg><span>Apps</span></button>
@@ -690,7 +692,7 @@ const S = {
   files: null, fileMin: 200, fileFilter: 'all', apps: null, warned: false
 };
 const $ = id => document.getElementById(id);
-const VIEWS = ['map', 'table', 'hot', 'clean', 'dupes', 'files', 'apps', 'system'];
+const VIEWS = ['map', 'table', 'hot', 'clean', 'left', 'dupes', 'files', 'apps', 'system'];
 const big = (v, unit) => `${esc(v)}<span style="font-size:.42em;letter-spacing:0;margin-left:.15em">${esc(unit)}</span>`;
 
 /* ------------------------------------------------------- deep linking --- */
@@ -750,9 +752,12 @@ async function poll() {
   $('capL').textContent = st.running ? 'Indexing' : 'Indexed';
   $('scanTxt').textContent = st.running
     ? st.current.replace(/^[A-Za-z]:\\/, '').slice(0, 46) || 'reading…'
-    : `${st.dirs.toLocaleString()} folders · ${since(st.indexedAt)}`;
+    : `${st.dirs.toLocaleString()} folders · ${st.live ? 'live' : since(st.indexedAt)}`;
 
   if (st.running) { S.scanning = true; setTimeout(poll, 400); return; }
+  if (st.live && S.liveApplied !== undefined && st.liveApplied !== S.liveApplied && ['map', 'table', 'hot', 'clean', 'left'].includes(S.view)) { render(); loadReclaim(); }
+  S.liveApplied = st.live ? st.liveApplied : undefined;
+  if (st.hasIndex && !S.nudged) { S.nudged = true; nudge(); }
   if (S.scanning) {
     S.scanning = false;
     S.root = st.root;
@@ -966,10 +971,13 @@ function tickHTML(r) {
 function drawCards(rows, kind) {
   const host = $('scroll');
   if (!rows.length) {
-    host.innerHTML = kind === 'clean'
+    host.innerHTML = kind === 'left'
+      ? emptyHTML('No leftovers found', 'No project with node_modules, a venv or build output (20 MB+) turned up, and no throwaway-named folders.' + (S.hidden ? ` ${S.hidden} hidden by you.` : ''), 'hot') + hiddenBar()
+      : kind === 'clean'
       ? emptyHTML('Nothing left to clean', 'No cache or model folder on this drive is big enough to bother with. Caches refill as you work — look again after a few builds.', 'hot')
       : emptyHTML('No hotspots', 'Nothing over the size threshold. Try the map and browse by hand.', 'map');
     wireEmpty(host);
+    host.querySelectorAll('[data-hidden]').forEach(b => b.onclick = async () => { await api('/api/leftovers/reset'); render(); });
     return;
   }
   const drops = rows.filter(r => r.removable && advice(r).tag === 'DROP');
@@ -977,7 +985,10 @@ function drawCards(rows, kind) {
   const max = rows.reduce((m, r) => Math.max(m, r.size), 0) || 1;
   const total = rows.reduce((a, r) => a + r.size, 0);
   const dev = rows.filter(r => /node_modules|\.venv|target|DerivedData|__pycache__|\.gradle|\.nuget|\.m2|\.cargo/.test(r.path));
-  const summary = kind === 'clean'
+  const projects = new Set(rows.map(r => r.project)).size;
+  const summary = kind === 'left'
+    ? `<p class="lbl" style="color:var(--v-FILES);padding:0 var(--s1) var(--s3)">${projects} projects · ${fmt(total)} · cold ones first</p>`
+    : kind === 'clean'
     ? `<p class="lbl" style="color:var(--v-FILES);padding:0 var(--s1) var(--s3)">${rows.length} folders · ${fmt(total)}` +
       (dev.length ? ` · ${dev.length} dev caches holding ${fmt(dev.reduce((a, r) => a + r.size, 0))}` : '') + `</p>` : '';
   host.innerHTML = summary + `
@@ -986,6 +997,7 @@ function drawCards(rows, kind) {
       <button class="btn ghost" data-pick="all">Select every unprotected row</button>
       <button class="btn ghost" data-pick="none">Clear</button>
       <span class="lbl" style="color:var(--text-3)">shift-click a tick to take a range</span>
+      ${kind === 'left' ? hiddenBar(true) : ''}
     </div>` + rows.map((r, i) => `
     <div class="row rise" style="animation-delay:${Math.min(i * 22, 260)}ms;${tint(r.verdict)}"
          data-path="${esc(r.path)}" data-sel="${S.sel.has(r.path) ? 1 : 0}">
@@ -998,6 +1010,7 @@ function drawCards(rows, kind) {
         <div class="track"><i style="width:${(r.size / max * 100).toFixed(1)}%"></i></div>
       </button>
       <div class="sz">${fmt(r.size)}</div>
+      ${kind === 'left' ? `<button class="dig" data-act="ignore" title="Never suggest this project again" aria-label="Never suggest ${esc(r.name)}">${icon('i-hide', { s: 14 })}</button>` : ''}
       ${r.dir ? `<button class="dig" data-act="open" aria-label="Open ${esc(r.name)} in the map">${icon('i-down')}</button>` : `<button class="dig" data-act="reveal" aria-label="Show ${esc(r.name)} in the file manager">${icon('i-ext', { s: 14 })}</button>`}
     </div>`).join('');
   host.querySelectorAll('[data-pick]').forEach(b => b.onclick = () => {
@@ -1007,8 +1020,12 @@ function drawCards(rows, kind) {
     paintSel();
     kind === 'files' ? drawFiles(S.files) : drawCards(rows, kind);
   });
+  host.querySelectorAll('[data-hidden]').forEach(b => b.onclick = async () => { await api('/api/leftovers/reset'); render(); });
   wireRows(host, rows, '.row');
 }
+// Projects the user said to stop suggesting; one click brings them all back.
+const hiddenBar = inline => S.hidden
+  ? `<button class="btn ghost" data-hidden="1">${inline ? '' : 'Show '}${S.hidden} hidden · show again</button>` : '';
 
 /* ------------------------------------------------------------- files --- */
 async function startFiles() {
@@ -1103,15 +1120,25 @@ async function drawApps() {
 }
 
 /* ------------------------------------------------------------ system --- */
+// Live tracking: the index follows the disk instead of going stale. Opt-in, because reading the
+// NTFS change journal needs an administrator.
+function liveHTML(l) {
+  const body = !l.supported ? 'Live tracking reads the NTFS change journal, so it is Windows-only.'
+    : l.on ? `<b>On</b> since ${esc(l.since)} · ${l.applied} folders refreshed${l.pending ? ` · ${l.pending} waiting` : ''}. Sizes follow the disk without a rescan.`
+    : `Keeps the index current without a rescan by reading the NTFS change journal. ${l.elevated ? '' : 'Needs administrator rights: DiskLens restarts with a Windows prompt.'}`
+      + (l.error ? `<br><span style="color:var(--bad,#f66)">${esc(l.error)}</span>` : '');
+  return `<div class="sysrow"><div><div class="nm">Live index</div><div class="hint">${body}</div></div>
+    <div class="sz">${l.supported ? `<button class="btn ${l.on ? 'ghost' : 'lime'}" data-live="${l.on ? 0 : 1}">${l.on ? 'Turn off' : l.elevated ? 'Turn on' : 'Turn on (restarts as admin)'}</button>` : ''}</div></div>`;
+}
 async function drawSystem() {
   const host = $('scroll');
   host.innerHTML = emptyHTML('Measuring', 'Hibernation file, page file, old installs, update caches, VM disks, the bin.', '');
-  let sys, log;
-  try { [sys, log] = await Promise.all([api('/api/system'), api('/api/log')]); }
+  let sys, log, live;
+  try { [sys, log, live] = await Promise.all([api('/api/system'), api('/api/log'), api('/api/live')]); }
   catch (e) { host.innerHTML = emptyHTML('Could not measure', String(e.message || e), ''); return; }
   if (S.view !== 'system') return;
   const total = sys.rows.reduce((a, r) => a + r.size, 0);
-  host.innerHTML = `
+  host.innerHTML = liveHTML(live) + `
     <p class="lbl" style="color:var(--v-FILES);padding:0 var(--s1) var(--s3)">${sys.rows.length} items · ${fmt(total)} — DiskLens never deletes these; each has its own tool</p>` +
     sys.rows.map(r => `<div class="sysrow">
       <div><div class="nm">${esc(r.name)}</div>
@@ -1123,8 +1150,20 @@ async function drawSystem() {
       <div class="sz">${r.size ? fmt(r.size) : '—'}</div>
     </div>`).join('') +
     `<p class="lbl" style="color:var(--text-3);padding:var(--s3) var(--s1) var(--s2)">Removed by DiskLens · ${fmt(log.total)} across ${log.rows.length} items</p>` +
-    (log.rows.length ? log.rows.slice(0, 60).map(l => `<div class="copy"><span class="p" style="color:var(--text-3)">${esc(l.when.slice(0, 10))}</span><span class="p">${esc(l.path)}</span><span class="meta">${fmt(l.size)}</span></div>`).join('')
+    (log.rows.length ? log.rows.slice(0, 60).map(l => `<div class="copy" style="grid-template-columns:84px 1fr auto auto"><span class="p" style="color:var(--text-3)">${esc(l.when.slice(0, 10))}</span><span class="p">${esc(l.path)}</span><span class="meta">${fmt(l.size)}</span>${l.restored ? '<span class="meta">restored</span>' : `<button class="btn ghost" data-restore="${esc(l.path)}">Restore</button>`}</div>`).join('')
       : `<p style="font-size:.75rem;color:var(--text-3);padding:0 var(--s1)">Nothing yet. Everything removed through DiskLens is listed here with its size.</p>`);
+  host.querySelectorAll('[data-restore]').forEach(b => b.onclick = async () => {
+    b.disabled = true; b.textContent = 'Restoring…';
+    try { await api('/api/restore?path=' + encodeURIComponent(b.dataset.restore)); toast('Put back where it was'); }
+    catch (e) { toast('Could not restore it — ' + (e.message || e), 'bad', 7000); }
+    S.rows = []; drawSystem(); loadReclaim();
+  });
+  host.querySelectorAll('[data-live]').forEach(b => b.onclick = async () => {
+    const on = b.dataset.live === '1';
+    try { const r = await api('/api/live/set?on=' + (on ? 1 : 0)); if (r.restarting) { toast('Restarting as administrator…', 'ok', 8000); return; } }
+    catch (e) { toast('Could not change it — ' + (e.message || e), 'bad', 7000); }
+    drawSystem();
+  });
   host.querySelectorAll('[data-copy]').forEach(b => b.onclick = () => {
     const t = document.createElement('textarea'); t.value = b.dataset.copy; document.body.appendChild(t); t.select();
     try { document.execCommand('copy'); toast('Command copied'); } catch { toast('Could not copy', 'bad'); }
@@ -1240,6 +1279,9 @@ function wireRows(host, rows, sel) {
       if (b.dataset.act === 'tick') { S.lastTick = r.path; toggle(r); }
       if (b.dataset.act === 'pick') inspect(r);
       if (b.dataset.act === 'open') go(r.path, true);
+      if (b.dataset.act === 'ignore') {
+        api('/api/leftovers/ignore?path=' + encodeURIComponent(r.project || r.path)).then(() => { toast('Hidden - it will not be suggested again'); render(); });
+      }
       if (b.dataset.act === 'reveal') api('/api/reveal?path=' + encodeURIComponent(r.path)).catch(() => {});
     });
     el.onpointerdown = e => { if (!e.target.closest('[data-act]')) inspect(r); };
@@ -1336,6 +1378,12 @@ function advice(r) {
     : `untouched ${(days / 365).toFixed(days < 730 ? 1 : 0).replace(/\.0$/, '')} years`;
 
   if (!r.removable) return { tag: 'KEEP', why: 'protected — ' + VERDICT[key(r.verdict)], days };
+  if (r.kind === 'project') {
+    const git = r.vcs ? 'has git history' : 'no git - this may be the only copy';
+    return r.scratch && days !== null && days > 60
+      ? { tag: 'DROP', why: `throwaway-looking project, ${when}, ${git}`, days }
+      : { tag: 'REVIEW', why: `project, ${when}, ${git}`, days };
+  }
   if (r.verdict === 'DATA') return { tag: 'KEEP', why: 'your own files · ' + when, days };
   if (r.verdict === 'HEAVY') return { tag: 'REVIEW', why: 'shrink it in its own tool · ' + when, days };
   if (r.verdict === 'CACHE') {
@@ -1453,6 +1501,7 @@ const SUBTITLE = {
   system: 'System space, and the one command that shrinks each',
   hot: 'Biggest folders anywhere on the drive',
   clean: 'Caches and models that are safe to drop',
+  left: 'Cold projects and the folders a build recreates',
   dupes: 'The same file kept in more than one place'
 };
 
@@ -1503,6 +1552,7 @@ async function render(keep) {
   $('heroHint').textContent = isMap ? 'double-click a block to go deeper'
     : S.view === 'table' ? 'sortable · keyboard friendly'
     : S.view === 'hot' ? 'where the space actually went'
+    : S.view === 'left' ? 'old projects, and what inside them regrows'
     : S.view === 'dupes' ? 'the same bytes, stored twice'
     : S.view === 'files' ? 'the biggest single files, and how old they are'
     : S.view === 'apps' ? 'installed programs by size — uninstall the proper way'
@@ -1526,6 +1576,11 @@ async function render(keep) {
     if (isMap || S.view === 'table') {
       if (!keep) S.rows = await rowsFor(S.cwd);
       isMap ? drawMap(S.rows) : drawTable(S.rows);
+      return;
+    }
+    if (S.view === 'left') {
+      if (!keep) { const r = await api('/api/leftovers'); S.rows = r.rows; S.hidden = r.hidden; }
+      drawCards(S.rows, 'left');
       return;
     }
     if (!keep) {
@@ -1611,7 +1666,8 @@ $('shYes').onclick = async () => {
     });
   } catch (e) { toast('Nothing was removed — ' + (e.message || e), 'bad', 7000); return; }
   S.sel.clear(); paintSel();
-  toast(`Recovered ${fmt(r.freed)} from ${r.removed.length} item(s)` +
+  S.freed = (S.freed || 0) + r.freed;
+  toast(`Recovered ${fmt(r.freed)} from ${r.removed.length} item(s)` + (r.freeAfter > r.freeBefore ? ` · ${S.drive || 'drive'} free ${fmt(r.freeBefore)} → ${fmt(r.freeAfter)}` : '') + (S.freed > r.freed ? ` · ${fmt(S.freed)} this session` : '') +
         (r.refused.length ? ` · ${r.refused.length} refused` : ''), r.refused.length ? 'bad' : 'ok', 5000);
   // The server already patched the index for what it removed - no rescan.
   $('aside').innerHTML = idleAside();
@@ -1656,6 +1712,25 @@ setTheme(readTheme() || (matchMedia('(prefers-color-scheme: light)').matches ? '
 $('themeBtn').onclick = () =>
   setTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light');
 
+/* ------------------------------------------------------------- nudge --- */
+// Once a month at launch: if cold projects are holding a lot of rebuildable space, say so.
+// Nothing runs in the background - the app has to be open to notice.
+const NUDGE_MIN = 5 * 2 ** 30, NUDGE_EVERY = 30 * DAY;
+async function nudge() {
+  try { if (Date.now() - Number(localStorage.getItem('dl-nudge') || 0) < NUDGE_EVERY) return; } catch {}
+  let r;
+  try { r = await api('/api/leftovers'); } catch { return; }
+  const drop = r.rows.filter(x => x.kind === 'rebuild' && x.removable && advice(x).tag === 'DROP');
+  const sum = drop.reduce((a, x) => a + x.size, 0);
+  if (sum < NUDGE_MIN) return;
+  const t = $('toast');
+  t.innerHTML = `<span>${fmt(sum)} sits in ${new Set(drop.map(x => x.project)).size} cold projects (dependencies and build output that regrow)</span> <button class="btn lime" id="nudgeGo" style="margin-left:12px">Review</button>`;
+  t.dataset.kind = 'ok'; t.dataset.on = '1';
+  clearTimeout(toastT);
+  try { localStorage.setItem('dl-nudge', String(Date.now())); } catch {}
+  $('nudgeGo').onclick = () => { t.dataset.on = '0'; setView('left'); };
+}
+
 /* ------------------------------------------------------------ updates --- */
 // One quiet check per launch. A newer GitHub release shows a banner; the
 // button downloads that release's installer, which swaps the files and reopens.
@@ -1697,7 +1772,7 @@ addEventListener('keydown', e => {
     e.preventDefault(); up();
   }
   if (e.key === 'r' && !e.ctrlKey && !e.metaKey) $('rescan').click();
-  const n = '12345678'.indexOf(e.key);
+  const n = '123456789'.indexOf(e.key);
   if (n >= 0) setView(VIEWS[n]);
 });
 </script>

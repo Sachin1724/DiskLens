@@ -23,11 +23,16 @@ static class Program {
         try { Api.SelfTest(); Console.WriteLine("\nself-test OK"); return 0; }
         catch (Exception e) { Console.WriteLine("\n" + e.Message); return 1; }
       }
+      if (args[i] == "--livetest") {          // run from an elevated prompt: proves the journal feeds the index
+        if (Api.Win) AttachConsole(-1);
+        return LiveTest();
+      }
       if (args[i] == "--drive" && i + 1 < args.Length) drive = args[++i];
     }
 
     var api = new Api();
     api.Boot(drive);
+    if (Live.Wanted() && Live.Elevated()) Live.Start(api.Drive);
 
     var here = AppContext.BaseDirectory;
     var page = Path.Combine(here, "wwwroot", "ui.html");
@@ -67,6 +72,22 @@ static class Program {
     win.Load(page);
     win.WaitForClose();
     return 0;
+  }
+
+  static int LiveTest() {
+    if (!Live.Elevated()) { Console.WriteLine((char)10 + "live test: run this from an administrator prompt"); return 2; }
+    var tmp = Path.Combine(Path.GetTempPath(), "dl-live-" + Guid.NewGuid());
+    Directory.CreateDirectory(tmp);
+    DiskScan.Walk(tmp);
+    Live.Start(Path.GetPathRoot(tmp));
+    System.Threading.Thread.Sleep(2000);
+    File.WriteAllBytes(Path.Combine(tmp, "grew.bin"), new byte[12345]);
+    for (int i = 0; i < 60 && DiskScan.SizeOf(tmp) != 12345; i++) System.Threading.Thread.Sleep(1000);
+    bool ok = DiskScan.SizeOf(tmp) == 12345;
+    Console.WriteLine(ok ? (char)10 + "live test OK - the journal updated the index" : (char)10 + "live test FAILED " + Live.Error + " size=" + DiskScan.SizeOf(tmp));
+    Live.Stop();
+    try { Directory.Delete(tmp, true); } catch {}
+    return ok ? 0 : 1;
   }
 
   static (string route, Dictionary<string, string> q) Split(string path) {

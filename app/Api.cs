@@ -122,6 +122,48 @@ public static class Rules {
     }
   }
 
+  // Put an item back from the Recycle Bin / Trash. Windows matches the bin entry by
+  // original folder and name and runs the shell's own "undelete" verb.
+  public static void Restore(string path) {
+    if (Exists(path)) throw new IOException("something already exists at that path");
+    if (Win) {
+      Exception err = null;
+      var t = new System.Threading.Thread(() => {
+        try {
+          dynamic shell = Activator.CreateInstance(Type.GetTypeFromProgID("Shell.Application"));
+          dynamic bin = shell.NameSpace(10);
+          string dir = Path.GetDirectoryName(path).TrimEnd('\\'), leaf = Path.GetFileName(path);
+          string stem = Path.GetFileNameWithoutExtension(leaf);
+          dynamic best = null; DateTime bestT = DateTime.MinValue;
+          foreach (dynamic it in bin.Items()) {
+            string loc = new string(((string)bin.GetDetailsOf(it, 1)).Where(c => c >= ' ' && c != (char)0x200e && c != (char)0x200f).ToArray()).TrimEnd((char)92);
+            string name = it.Name;
+            if (!string.Equals(loc, dir, StringComparison.OrdinalIgnoreCase)) continue;
+            if (!string.Equals(name, leaf, StringComparison.OrdinalIgnoreCase) && !string.Equals(name, stem, StringComparison.OrdinalIgnoreCase)) continue;
+            DateTime when = DateTime.MinValue;
+            try { when = (DateTime)it.ExtendedProperty("System.Recycle.DateDeleted"); } catch {}
+            if (best == null || when >= bestT) { best = it; bestT = when; }
+          }
+          if (best == null) throw new IOException("not in the Recycle Bin any more");
+          best.InvokeVerb("undelete");
+        } catch (Exception e) { err = e; }
+      });
+      t.SetApartmentState(System.Threading.ApartmentState.STA);
+      t.Start(); t.Join();
+      if (err != null) throw err;
+      for (int i = 0; i < 50 && !Exists(path); i++) System.Threading.Thread.Sleep(100);
+    } else {
+      var leaf = Path.GetFileName(path).Replace("\\", "\\\\").Replace("\"", "\\\"");
+      var psi = new ProcessStartInfo("osascript") { RedirectStandardError = true, UseShellExecute = false };
+      psi.ArgumentList.Add("-e");
+      psi.ArgumentList.Add($"tell application \"Finder\" to put back (item 1 of (every item of trash whose name is \"{leaf}\"))");
+      var p = Process.Start(psi);
+      p.WaitForExit();
+      if (p.ExitCode != 0) throw new IOException("put back failed: " + p.StandardError.ReadToEnd());
+    }
+    if (!Exists(path)) throw new IOException("restore did not complete");
+  }
+
   // A folder opens; a file is only highlighted. Never hand a file to the shell
   // to launch with whatever is registered for its extension.
   public static void Reveal(string path) {
@@ -196,7 +238,7 @@ public class Api {
           files = DiskScan.FileCount, current = DiskScan.Current, root = DiskScan.Root,
           free, used, drive = Drive, sep = Path.DirectorySeparatorChar.ToString(),
           os = Win ? "windows" : RuntimeInformation.IsOSPlatform(OSPlatform.OSX) ? "mac" : "linux",
-          hasIndex = DiskScan.HasIndex,
+          hasIndex = DiskScan.HasIndex, live = Live.On, liveApplied = Live.Applied,
           indexedAt = DiskScan.IndexedAtUtc != 0 ? DateTime.FromBinary(DiskScan.IndexedAtUtc).ToString("o") : null
         };
       }
@@ -211,6 +253,7 @@ public class Api {
           Drive = d;
           // Switching drives uses that drive's saved index if it has one.
           if (!(switching && DiskScan.Load(d))) DiskScan.Start(d);
+          if (switching && Live.On) Live.Start(d);
         }
         return new { ok = true, drive = Drive };
       }
@@ -283,6 +326,7 @@ public class Api {
       case "/api/recycle": {
         var req = JsonSerializer.Deserialize<RecycleBody>(body ?? "{}", new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
         long freed = 0; var removed = new List<string>(); var refused = new List<string>();
+        long freeBefore = Rules.Volume(Drive).free;
         foreach (var t in req?.paths ?? new string[0]) {
           if (!Rules.Removable(t)) { refused.Add(t); continue; }
           bool isFile = File.Exists(t);
@@ -296,7 +340,7 @@ public class Api {
           } catch { refused.Add(t); }
         }
         if (removed.Count > 0) DiskScan.Save();
-        return new { freed, removed, refused };
+        return new { freed, removed, refused, freeBefore, freeAfter = Rules.Volume(Drive).free };
       }
 
       case "/api/files/start": {
@@ -317,6 +361,49 @@ public class Api {
                        removable = v.v != "SYSTEM" && Rules.Removable(f[2]) };
         }).ToArray();
         return new { running = BigScan.Running, done = BigScan.Done, seen = BigScan.Seen, current = BigScan.Current, rows };
+      }
+
+      case "/api/leftovers": return new { rows = Leftovers(), hidden = Ignored().Count };
+
+      case "/api/leftovers/ignore": {
+        if (!string.IsNullOrWhiteSpace(path)) try { File.AppendAllText(IgnorePath(), path + "\n"); } catch {}
+        return new { ok = true };
+      }
+
+      case "/api/leftovers/reset": {
+        try { File.Delete(IgnorePath()); } catch {}
+        return new { ok = true };
+      }
+
+      case "/api/restore": {
+        // Only something DiskLens itself removed can be put back through it.
+        if (!RemovedLines().Any(l => l.p == path)) throw new Exception("not something DiskLens removed");
+        Rules.Restore(path);
+        if (Directory.Exists(path)) DiskScan.RefreshSubtree(path);
+        else { var dir = Path.GetDirectoryName(path); if (dir != null) DiskScan.RefreshDir(dir); }
+        try { File.AppendAllText(RestoredPath(), DateTime.UtcNow.ToString("o") + "|" + path + "\n"); } catch {}
+        DiskScan.Save();
+        return new { ok = true };
+      }
+
+      case "/api/live": return LiveState();
+
+      case "/api/live/set": {
+        bool on = Q(q, "on") == "1";
+        Live.Want(on);
+        if (!on) { Live.Stop(); return LiveState(); }
+        if (Live.Elevated()) { Live.Start(Drive); return LiveState(); }
+        if (!Live.Supported) return LiveState();
+        // Opening the volume needs admin: restart this app elevated, which resumes live tracking by itself.
+        var exe = Environment.ProcessPath;
+        Process.Start(new ProcessStartInfo(exe, "--drive \"" + Drive + "\"") { UseShellExecute = true, Verb = "runas" });
+        System.Threading.Tasks.Task.Delay(800).ContinueWith(_ => Environment.Exit(0));
+        return new { restarting = true };
+      }
+
+      case "/api/leftovers/summary": {
+        var rows = Leftovers();
+        return new { rows };
       }
 
       case "/api/apps": return new { rows = Apps() };
@@ -362,15 +449,19 @@ public class Api {
       }
 
       case "/api/log": {
-        var rows = new List<object>(); long total = 0;
+        var restored = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         try {
-          foreach (var line in File.ReadAllLines(LogPath()).Reverse().Take(300)) {
-            var f = line.Split('|', 3);
-            if (f.Length < 3) continue;
-            long sz = long.Parse(f[1]); total += sz;
-            rows.Add(new { when = f[0], size = sz, path = f[2] });
+          foreach (var line in File.ReadAllLines(RestoredPath())) {
+            var f = line.Split('|', 2);
+            if (f.Length == 2) restored[f[1]] = f[0];
           }
         } catch {}
+        var rows = new List<object>(); long total = 0;
+        foreach (var l in RemovedLines().Reverse().Take(300)) {
+          total += l.size;
+          bool back = restored.TryGetValue(l.p, out var at) && string.CompareOrdinal(at, l.when) > 0;
+          rows.Add(new { when = l.when, size = l.size, path = l.p, restored = back });
+        }
         return new { rows, total };
       }
 
@@ -403,6 +494,94 @@ public class Api {
     Version.TryParse(a, out var x) && Version.TryParse(b, out var y) && x > y;
 
   [DllImport("shell32.dll")] static extern int SHEmptyRecycleBin(IntPtr hwnd, string root, uint flags);
+
+  // ------------------------------------------------------- leftovers ---
+  // Projects people stop touching, and the folders inside them that a build or
+  // an install can recreate. Judged only from what the index already holds
+  // (names, sizes, last-write stamps) plus a few File.Exists on candidates.
+  static readonly HashSet<string> Always = new(StringComparer.OrdinalIgnoreCase) {
+    "node_modules", ".venv", "venv", ".next", ".nuxt", ".svelte-kit", ".turbo", ".parcel-cache", ".tox", ".pytest_cache", ".mypy_cache", ".dart_tool" };
+  static readonly HashSet<string> NeedsProject = new(StringComparer.OrdinalIgnoreCase) {
+    "target", "dist", "build", "out", "bin", "obj", ".gradle" };
+  static readonly string[] Markers = { "package.json", "Cargo.toml", "pom.xml", "build.gradle", "build.gradle.kts", "pyproject.toml", "requirements.txt", "CMakeLists.txt", "go.mod" };
+  static readonly Regex Scratch = new Regex(
+    @"^(tmp|temp|untitled\d*|new[ _-]?(folder|project)\d*|copy of .+|.+ - copy( \(\d+\))?|(my[ _-]?)?(app|project|demo|test|tests|sandbox|playground|scratch|try|trial)[ _-]?\d*)$",
+    RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+  static bool IsProject(string dir) {
+    foreach (var m in Markers) if (File.Exists(Path.Combine(dir, m))) return true;
+    try { return Directory.EnumerateFiles(dir, "*.csproj").Any() || Directory.EnumerateFiles(dir, "*.sln").Any(); } catch { return false; }
+  }
+
+  static string IgnorePath() => Path.Combine(Path.GetDirectoryName(DiskScan.IndexPath("x")), "ignore.txt");
+  static List<string> Ignored() {
+    try { return File.ReadAllLines(IgnorePath()).Where(l => l.Length > 0).ToList(); } catch { return new List<string>(); }
+  }
+
+  static List<object> Leftovers() {
+    var skip = Ignored();
+    bool Hidden(string p) => skip.Any(i => p.StartsWith(i, StringComparison.OrdinalIgnoreCase) && (p.Length == i.Length || p[i.Length] == Path.DirectorySeparatorChar));
+    bool Nested(string parent) => parent.Split(Path.DirectorySeparatorChar).Any(s => Always.Contains(s) || NeedsProject.Contains(s));
+
+    var rebuild = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);   // project -> its rebuildable folders
+    var scratch = new List<string>();
+    foreach (var dir in DiskScan.Total.Keys.ToArray()) {
+      var leaf = Path.GetFileName(dir.TrimEnd(Path.DirectorySeparatorChar));
+      if (leaf.Length == 0) continue;
+      var parent = Path.GetDirectoryName(dir.TrimEnd(Path.DirectorySeparatorChar));
+      if (parent == null) continue;
+      bool hit = Always.Contains(leaf) || NeedsProject.Contains(leaf);
+      if (hit) {
+        if (Nested(parent) || Hidden(dir) || DiskScan.Total[dir] < (20L << 20)) continue;
+        bool ok = (leaf is "venv" or ".venv") ? File.Exists(Path.Combine(dir, "pyvenv.cfg"))
+                : Always.Contains(leaf) ? true : IsProject(parent);
+        if (!ok || !Rules.Removable(dir)) continue;
+        if (!rebuild.TryGetValue(parent, out var l)) rebuild[parent] = l = new List<string>();
+        l.Add(dir);
+      } else if (Scratch.IsMatch(leaf) && DiskScan.Total[dir] >= (5L << 20) && !Nested(parent) && !Hidden(dir)) scratch.Add(dir);
+    }
+
+    var groups = new List<(double order, List<object> rows)>();
+    foreach (var (proj, dirs) in rebuild) {
+      var names = new HashSet<string>(dirs, StringComparer.OrdinalIgnoreCase);
+      var pf = DiskScan.ProjectFreshExcept(proj, c => names.Contains(c));
+      var rows = new List<object>(); long sum = 0;
+      foreach (var d in dirs.OrderByDescending(x => DiskScan.Total[x])) {
+        long sz = DiskScan.Total[d]; sum += sz;
+        rows.Add(new { size = sz, dir = true, path = d, name = Path.GetFileName(proj) + " / " + Path.GetFileName(d), project = proj,
+                       verdict = "CACHE", note = "Rebuildable - recreated by the next install or build", removable = true,
+                       fresh = DiskScan.FreshOf(d), projectFresh = pf, kind = "rebuild" });
+      }
+      groups.Add((Stale(pf) * 1e13 + sum, rows));
+    }
+    foreach (var d in scratch) {
+      if (rebuild.ContainsKey(d) || !Rules.Removable(d)) continue;
+      var pf = DiskScan.FreshOf(d);
+      groups.Add((Stale(pf) * 1e13 + DiskScan.Total[d], new List<object> { new {
+        size = DiskScan.Total[d], dir = true, path = d, name = Path.GetFileName(d), project = d, verdict = "UNKNOWN",
+        note = "Throwaway-looking project", removable = true, fresh = pf, projectFresh = (string)null, kind = "project",
+        vcs = Directory.Exists(Path.Combine(d, ".git")), scratch = true } }));
+    }
+    return groups.OrderByDescending(g => g.order).Take(60).SelectMany(g => g.rows).ToList();
+  }
+
+  // 1 when the newest write is over a month old, so cold projects sort above live ones.
+  static int Stale(string day) => DateTime.TryParse(day, out var d) && (DateTime.UtcNow - d).TotalDays > 30 ? 1 : 0;
+
+  static object LiveState() => new {
+    supported = Live.Supported, elevated = Live.Elevated(), wanted = Live.Wanted(), on = Live.On,
+    since = Live.Since, applied = Live.Applied, pending = Live.Pending, error = Live.Error
+  };
+
+  static string RestoredPath() => Path.Combine(Path.GetDirectoryName(DiskScan.IndexPath("x")), "restored.log");
+  static IEnumerable<(string when, long size, string p)> RemovedLines() {
+    string[] lines;
+    try { lines = File.ReadAllLines(LogPath()); } catch { yield break; }
+    foreach (var line in lines) {
+      var f = line.Split('|', 3);
+      if (f.Length == 3 && long.TryParse(f[1], out var sz)) yield return (f[0], sz, f[2]);
+    }
+  }
 
   static string LogPath() => Path.Combine(Path.GetDirectoryName(DiskScan.IndexPath("x")), "removed.log");
   static void Log(long size, string path) {
@@ -597,6 +776,47 @@ public class Api {
     Must(DiskScan.FreshOf(proj) == DateTime.UtcNow.AddDays(-3).ToString("yyyy-MM-dd"), "FreshOf: rolls up to the newest");
     DiskScan.Save();
     Must(DiskScan.Load(tmp) && DiskScan.ProjectFreshOf(nm) == DateTime.UtcNow.AddDays(-3).ToString("yyyy-MM-dd"), "Load: own stamps survive the round trip");
+
+    // Leftovers: a cold project's node_modules is offered, judged by the source around it.
+    File.WriteAllBytes(Path.Combine(proj, "package.json"), new byte[10]);
+    File.WriteAllBytes(Path.Combine(nm, "big.bin"), new byte[21 << 20]);
+    File.SetLastWriteTimeUtc(Path.Combine(proj, "package.json"), DateTime.UtcNow.AddDays(-90));
+    File.SetLastWriteTimeUtc(Path.Combine(proj, "index.js"), DateTime.UtcNow.AddDays(-90));
+    DiskScan.RefreshSubtree(proj);
+    var left = Leftovers().Cast<object>().Select(o => JsonSerializer.Serialize(o)).ToList();
+    Must(left.Any(j => j.Contains("node_modules") && j.Contains(DateTime.UtcNow.AddDays(-90).ToString("yyyy-MM-dd"))),
+         "leftovers: cold project's node_modules offered with the project's age, not the cache's");
+    Directory.CreateDirectory(Path.Combine(nm, "inner", "node_modules"));
+    File.WriteAllBytes(Path.Combine(nm, "inner", "node_modules", "x.bin"), new byte[21 << 20]);
+    DiskScan.RefreshSubtree(proj);
+    Must(Leftovers().Count(o => JsonSerializer.Serialize(o).Contains("node_modules")) == 1, "leftovers: nested node_modules not listed twice");
+    File.Delete(Path.Combine(nm, "big.bin")); Directory.Delete(Path.Combine(nm, "inner"), true);
+    DiskScan.RefreshSubtree(proj);
+
+    // RefreshDir: one folder re-read, its ancestors settled, new/removed subfolders followed.
+    long before = DiskScan.SizeOf(tmp);
+    File.WriteAllBytes(Path.Combine(proj, "grew.bin"), new byte[1000]);
+    DiskScan.RefreshDir(proj);
+    Must(DiskScan.SizeOf(tmp) == before + 1000, "RefreshDir: ancestors not settled");
+    var fresh1 = Path.Combine(proj, "newsub"); Directory.CreateDirectory(fresh1);
+    File.WriteAllBytes(Path.Combine(fresh1, "n.bin"), new byte[500]);
+    DiskScan.RefreshDir(proj);
+    Must(DiskScan.SizeOf(tmp) == before + 1500, "RefreshDir: new subfolder not picked up");
+    Directory.Delete(fresh1, true);
+    DiskScan.RefreshDir(proj);
+    Must(DiskScan.SizeOf(tmp) == before + 1000, "RefreshDir: removed subfolder not dropped");
+    File.Delete(Path.Combine(proj, "grew.bin")); DiskScan.RefreshDir(proj);
+
+    // Restore: out to the Recycle Bin and back, through the same routes the page uses.
+    if (Win) {
+      var rf = Path.Combine(tmp, "restore-me.txt");
+      File.WriteAllText(rf, "x");
+      Rules.Trash(rf);
+      Must(!File.Exists(rf), "restore: trash did not remove it");
+      Rules.Restore(rf);
+      Must(File.Exists(rf), "restore: file not put back");
+      File.Delete(rf);
+    }
 
     // Big files: the top list, oldest-first evidence attached, persisted.
     BigScan.Start(tmp, 1);

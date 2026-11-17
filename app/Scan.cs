@@ -151,6 +151,19 @@ public static class DiskScan {
     return Day(best);
   }
 
+  // Newest write around a project root, ignoring the folders (build output,
+  // dependencies) that a build or an install touches without anyone working.
+  public static string ProjectFreshExcept(string parent, Func<string, bool> skip) {
+    long best; FreshOwn.TryGetValue(Key(parent), out best);
+    List<string> kids;
+    if (Kids.TryGetValue(Key(parent), out kids))
+      foreach (var c in kids) {
+        long f;
+        if (!skip(c) && Fresh.TryGetValue(c, out f) && f > best) best = f;
+      }
+    return Day(best);
+  }
+
   public static string FreshOf(string dir) {
     long t;
     if (!Fresh.TryGetValue(Key(dir), out t) || t <= 0) return null;
@@ -364,6 +377,30 @@ public static class DiskScan {
     HasIndex = true;
     Save();
     return now;
+  }
+
+  // Re-read one folder's own files only, leaving its subfolders' totals alone.
+  // Used by the live journal: a file changed in dir, so only dir needs reading.
+  // A subfolder that appeared or vanished is the one case that goes deeper.
+  public static void RefreshDir(string dir) {
+    var key = Key(dir);
+    var target = key.TrimEnd(SEP);
+    if (target.Length == 2 || target.Length == 0) target = key;
+    if (!Own.ContainsKey(key)) { if (Directory.Exists(target)) RefreshSubtree(target); return; }
+    if (!Directory.Exists(target)) { Forget(key); return; }
+
+    var mine = new List<string>(); long newest;
+    long own = ScanDir(target, mine, false, out newest);
+    long delta = own - Own[key];
+    Own[key] = own; FreshOwn[key] = newest;
+    Total[key] = Math.Max(0, Total[key] + delta);
+    long f;
+    if (!Fresh.TryGetValue(key, out f) || newest > f) Fresh[key] = newest;
+    AddToAncestors(key, delta);
+
+    var before = Kids.TryGetValue(key, out var old) ? old.ToList() : new List<string>();
+    foreach (var c in before) if (!mine.Any(m => string.Equals(m, c, StringComparison.OrdinalIgnoreCase))) Forget(c);
+    foreach (var c in mine) if (!before.Any(b => string.Equals(b, c, StringComparison.OrdinalIgnoreCase))) RefreshSubtree(c);
   }
 
   // The root is stored with a trailing separator and every other folder without
