@@ -15,7 +15,7 @@ cat > "$app/Contents/Info.plist" <<PLIST
   <key>CFBundleName</key><string>DiskLens</string>
   <key>CFBundleIdentifier</key><string>app.disklens</string>
   <key>CFBundleExecutable</key><string>DiskLens</string>
-  <key>CFBundleVersion</key><string>2.1.0</string>
+  <key>CFBundleVersion</key><string>2.2.0</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSAppleEventsUsageDescription</key><string>DiskLens asks Finder to move files to the Trash.</string>

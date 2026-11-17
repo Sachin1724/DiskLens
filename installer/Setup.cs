@@ -16,7 +16,7 @@ using Microsoft.Win32;
 
 static class Setup {
     const string Name = "DiskLens";
-    const string Version = "2.1.0";   // keep equal to <Version> in app/DiskLens.csproj
+    const string Version = "2.2.0";   // keep equal to <Version> in app/DiskLens.csproj
     const string Publisher = "DiskLens";
     const string RegKey = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\DiskLens";
 
